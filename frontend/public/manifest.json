@@ -1,0 +1,15 @@
+{
+  "short_name": "Rumbala",
+  "name": "Rumbala - Bimbel & Les Privat",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#0284c7",
+  "display": "standalone"
+}
