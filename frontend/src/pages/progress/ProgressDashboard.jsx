@@ -218,8 +218,8 @@ export default function ProgressDashboard() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5">
+                  {/* Progress Bar & Milestone Wording */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-700">
                         Pertemuan {completed} dari {totalPackage} &ndash; {selectedPeriod}
@@ -232,10 +232,18 @@ export default function ProgressDashboard() {
                         style={{ width: `${pct}%` }}
                       ></div>
                     </div>
+
+                    {/* Format Milestone Resmi Sesuai Revisi Klien */}
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-medium">
+                        Siswa telah menyelesaikan pertemuan ke <strong>{completed}</strong> dari <strong>{totalPackage}</strong> pertemuan bulan <strong>{selectedPeriod.replace("Periode: ", "")}</strong> dengan capaian baik.
+                      </span>
+                    </div>
                   </div>
 
                   {/* Program Details */}
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                       <span className="text-[10px] text-slate-400 block font-semibold">Paket Belajar:</span>
                       <span className="font-extrabold text-slate-800">{totalPackage} Pertemuan / Bulan</span>

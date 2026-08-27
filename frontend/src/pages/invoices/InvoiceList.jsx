@@ -326,32 +326,53 @@ export default function InvoiceList() {
                     </div>
                   </div>
 
-                  {/* Multi-Program Items Breakdown */}
-                  <div className="mt-3 space-y-2 text-xs">
+                  {/* Multi-Program Items Breakdown (Format Sesuai Revisi Klien) */}
+                  <div className="mt-3 space-y-2.5 text-xs">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                      Rincian Paket Bimbingan Belajar:
+                      Rincian Paket SPP Bulanan:
                     </span>
 
                     {items.length > 0 ? (
-                      <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl bg-slate-50/70 p-3 space-y-1.5">
+                      <div className="space-y-2">
                         {items.map((it, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs pt-1.5 first:pt-0">
-                            <div>
-                              <p className="font-bold text-slate-900">
-                                {it.program_name} &bull; <span className="text-slate-500">{it.class_type || "Semi Privat"}</span>
+                          <div key={idx} className="p-3 rounded-xl bg-slate-50/90 border border-slate-100 space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <p className="font-extrabold text-slate-900 text-sm">
+                                {it.program_name}
                               </p>
-                              <p className="text-[10px] text-slate-400">{it.unit_name || "Unit Riscon"} &bull; Paket {it.package || 8}x/bln</p>
+                              <span className="font-extrabold text-primary-700">{formatRupiah(it.fee || it.amount)}</span>
                             </div>
-                            <span className="font-extrabold text-slate-800">{formatRupiah(it.fee || it.amount)}</span>
+                            <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
+                              <p><span className="text-slate-400">Paket:</span> <strong className="text-slate-800">{it.package || 8} pertemuan / Bulan</strong></p>
+                              <p><span className="text-slate-400">Unit:</span> <span className="font-semibold text-slate-700">{it.unit_name || "Unit Riscon"}</span></p>
+                            </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="p-2.5 rounded-xl bg-slate-50 text-slate-700 font-semibold flex items-center justify-between">
-                        <span>Tagihan SPP {inv.period_month || "Bulanan"}</span>
-                        <span>{formatRupiah(inv.amount)}</span>
+                      <div className="p-3 rounded-xl bg-slate-50 text-slate-700 font-semibold space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-slate-900">{inv.program_name || "Bimbingan Belajar"}</span>
+                          <span className="font-bold text-primary-700">{formatRupiah(inv.amount)}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Paket: {inv.package_sessions || 8} pertemuan / Bulan</p>
                       </div>
                     )}
+
+                    {/* Progress Sesi & Ketentuan Hangus Info Box */}
+                    <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-medium">Progres Pembelajaran:</span>
+                      <span className="font-extrabold text-indigo-900 bg-white px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                        {inv.sessions_completed || 0} / {inv.package_sessions || 8} pertemuan
+                      </span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/70 text-[11px] text-amber-900 flex items-start gap-1.5 leading-snug">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Ketentuan:</strong> Paket berlaku 1 bulan berjalan. Sesi yang melewati bulan yang sama akan <strong>hangus</strong> (diusahakan dituntaskan di bulan yang sama).
+                      </span>
+                    </div>
                   </div>
                 </div>
 

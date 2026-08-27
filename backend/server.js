@@ -1185,7 +1185,7 @@ app.get('/api/attendances', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const { student_id, tutor_id, program_name, unit_name, date, status, search } = req.query;
+    const { student_id, tutor_id, program_name, unit_name, date, period, status, search } = req.query;
     const offset = (page - 1) * limit;
 
     let query = `
@@ -1233,6 +1233,10 @@ app.get('/api/attendances', authenticateToken, async (req, res) => {
     if (date) {
       query += ` AND a.date = ?`;
       params.push(date);
+    }
+    if (period && period !== 'Semua Periode') {
+      query += ` AND (DATE_FORMAT(a.date, '%Y-%m') = ? OR a.date LIKE ?)`;
+      params.push(period, `%${period}%`);
     }
     if (status) {
       query += ` AND a.status = ?`;
@@ -1413,7 +1417,7 @@ app.put('/api/attendances/:id/confirm', authenticateToken, async (req, res) => {
 
 app.get('/api/journals', authenticateToken, async (req, res) => {
   try {
-    const { student_id, program_name, search } = req.query;
+    const { student_id, program_name, period, search } = req.query;
     let query = `
       SELECT j.*, st.name as student_name, st.class_grade, t.name as tutor_name, a.status as attendance_status
       FROM journals j
@@ -1446,6 +1450,10 @@ app.get('/api/journals', authenticateToken, async (req, res) => {
     if (program_name && program_name !== 'Semua Program') {
       query += ` AND j.program_name = ?`;
       params.push(program_name);
+    }
+    if (period && period !== 'Semua Periode') {
+      query += ` AND (DATE_FORMAT(j.date, '%Y-%m') = ? OR j.date LIKE ?)`;
+      params.push(period, `%${period}%`);
     }
     if (search) {
       query += ` AND (st.name LIKE ? OR j.topic LIKE ? OR j.targets_achieved LIKE ?)`;
@@ -1600,6 +1608,15 @@ app.get('/api/progress/:studentId', authenticateToken, async (req, res) => {
       progParams.push(unit_name);
     }
     const [programs] = await db.query(progQuery, progParams);
+
+    // Calculate actual completed sessions per program from verified attendances (status = 'hadir')
+    for (let p of programs) {
+      const [attCount] = await db.query(
+        `SELECT COUNT(*) as count FROM attendances WHERE student_id = ? AND program_name = ? AND status = 'hadir'`,
+        [studentId, p.program_name]
+      );
+      p.completed_sessions = attCount[0]?.count ?? (p.completed_sessions_month || 0);
+    }
 
     // Attendance summary
     const [attStats] = await db.query(
@@ -2142,6 +2159,10 @@ app.get('/api/ai-reports', authenticateToken, async (req, res) => {
       } else {
         query += ' AND r.student_id = -1';
       }
+    } else if (req.user.role === 'tutor') {
+      const tutorId = req.user.tutor_id || 1;
+      query += ` AND r.tutor_id = ?`;
+      params.push(tutorId);
     }
 
     if (student_id) {
@@ -2283,11 +2304,20 @@ Buatlah respon HANYA dalam format JSON valid (tanpa markdown blok tambahan) deng
 app.put('/api/ai-reports/:id', authenticateToken, requireRole('admin', 'tutor'), async (req, res) => {
   try {
     const { title, summary, strengths, areas_for_improvement, recommendations, status } = req.body;
+    let finalStatus = status;
+    if (req.user.role === 'tutor') {
+      finalStatus = 'tutor_reviewed'; // Tutor cannot publish directly to parents; only save review
+    }
     await db.query(
       `UPDATE ai_reports SET title=?, summary=?, strengths=?, areas_for_improvement=?, recommendations=?, status=? WHERE id=?`,
-      [title, summary, strengths, areas_for_improvement, recommendations, status || 'admin_approved', req.params.id]
+      [title, summary, strengths, areas_for_improvement, recommendations, finalStatus || 'admin_approved', req.params.id]
     );
-    res.json({ success: true, message: 'Laporan perkembangan berhasil diperbarui / dipublish.' });
+    res.json({
+      success: true,
+      message: req.user.role === 'admin' && status === 'admin_approved'
+        ? 'Laporan perkembangan berhasil dipublish ke Portal Orang Tua!'
+        : 'Draft laporan berhasil diperbarui.'
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

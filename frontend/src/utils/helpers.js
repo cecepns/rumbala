@@ -65,21 +65,32 @@ export const createWhatsAppUrl = (phone, message) => {
  * Message Templates for WhatsApp 1-Click Communication
  */
 export const WA_TEMPLATES = {
-  // Invoice Billing notification (especially for milestone 4, 8, 12 sessions)
+  // Invoice Billing notification (per bulan, format sesuai revisi klien)
   INVOICE_BILLING: (invoice, student) => {
-    return `*NOTIFIKASI TAGIHAN LES RUMBALA* 📚✨\n\n` +
-      `Halo Bapak/Ibu *${student.parent_name || 'Orang Tua'}*,\n` +
-      `Alhamdulillah ananda *${student.name}* telah menyelesaikan sesi pembelajaran di Rumbala.\n\n` +
-      `Berikut adalah rincian tagihan pembayaran:\n` +
+    const period = invoice.period_month || "Agustus 2026";
+    const progText = invoice.items_json && invoice.items_json.length > 0
+      ? invoice.items_json.map(it => `• ${it.program_name} (Paket ${it.package || 8} Pertemuan / Bulan)`).join('\n')
+      : (invoice.program_name || 'Bimbingan Belajar');
+
+    const progressInfo = `${invoice.sessions_completed || 0}/${invoice.package_sessions || 8} pertemuan`;
+    const statusText = invoice.status === 'paid' ? 'Lunas' : 'Belum Lunas';
+
+    return `*TAGIHAN SPP BULANAN RUMBALA* 🧾✨\n\n` +
+      `Halo Ayah/Bunda dari ananda *${student.name}*,\n\n` +
+      `Berikut rincian tagihan SPP bimbingan belajar ananda:\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📄 No. Invoice: *${invoice.invoice_number}*\n` +
-      `📌 Keterangan: *${invoice.milestone_name || 'Paket ' + invoice.sessions_count + ' Pertemuan'}*\n` +
-      `💰 Total Tagihan: *${formatRupiah(invoice.amount)}*\n` +
+      `📌 *SPP ${period.toUpperCase()}*\n` +
+      `📚 ${progText}\n` +
+      `🎯 Progres : *${progressInfo}*\n` +
+      `💰 SPP : *${formatRupiah(invoice.amount)}*\n` +
+      `🏷️ Status : *${statusText}*\n` +
       `📅 Jatuh Tempo: *${formatDate(invoice.due_date)}*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `💳 Pembayaran dapat ditransfer ke rekening resmi Rumbala:\n` +
+      `⚠️ *Catatan Ketentuan Pertemuan:*\n` +
+      `Paket (4, 8, atau 12 pertemuan) berlaku untuk 1 (satu) bulan berjalan. Jika pertemuan melewati di bulan yang sama maka pertemuannya akan hangus. Mohon dituntaskan pertemuan ananda pada bulan yang sama.\n\n` +
+      `💳 *Rekening Pembayaran Resmi:*\n` +
       `*Bank BCA: 873-556-9921 (a.n Rumbala Edukasi)*\n\n` +
-      `Setelah melakukan transfer, mohon kirimkan bukti pembayaran melalui chat ini atau upload pada portal Rumbala. Terima kasih! 🙏`;
+      `Setelah transfer, mohon kirimkan konfirmasi bukti transfer. Terima kasih! 🙏✨\n_Rumbala - Bimbingan Belajar & Les Privat_`;
   },
 
   // Schedule Reminder notification

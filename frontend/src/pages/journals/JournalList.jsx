@@ -32,11 +32,12 @@ export default function JournalList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [programFilter, setProgramFilter] = useState("Semua Program");
+  const [periodFilter, setPeriodFilter] = useState("Agustus 2026");
 
   const fetchJournals = useCallback(async () => {
     try {
       setLoading(true);
-      const params = { search };
+      const params = { search, period: periodFilter };
 
       if (role === "parent") {
         if (selectedChildId) params.student_id = selectedChildId;
@@ -54,7 +55,7 @@ export default function JournalList() {
     } finally {
       setLoading(false);
     }
-  }, [search, role, selectedChildId, selectedProgram, programFilter]);
+  }, [search, role, selectedChildId, selectedProgram, programFilter, periodFilter]);
 
   useEffect(() => {
     fetchJournals();
@@ -132,23 +133,41 @@ export default function JournalList() {
           />
         </div>
 
-        {role !== "parent" && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-500">Program:</label>
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          {/* Periode Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+            <Calendar className="w-3.5 h-3.5 text-primary-600 shrink-0" />
             <select
-              value={programFilter}
-              onChange={(e) => setProgramFilter(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="Semua Program">Semua Program</option>
-              <option value="Cermat Matematika">Cermat Matematika</option>
-              <option value="English BEC">English BEC</option>
-              <option value="Prisma Kalkulator Tangan">Prisma Kalkulator Tangan</option>
-              <option value="Mengaji & Tahsin">Mengaji & Tahsin</option>
-              <option value="Tahfidz Quran">Tahfidz Quran</option>
+              <option value="Semua Periode">Semua Periode</option>
+              <option value="2026-08">Agustus 2026</option>
+              <option value="2026-07">Juli 2026</option>
+              <option value="2026-09">September 2026</option>
+              <option value="2026-10">Oktober 2026</option>
             </select>
           </div>
-        )}
+
+          {role !== "parent" && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-500">Program:</label>
+              <select
+                value={programFilter}
+                onChange={(e) => setProgramFilter(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
+              >
+                <option value="Semua Program">Semua Program</option>
+                <option value="Cermat Matematika">Cermat Matematika</option>
+                <option value="English BEC">English BEC</option>
+                <option value="Prisma Kalkulator Tangan">Prisma Kalkulator Tangan</option>
+                <option value="Mengaji & Tahsin">Mengaji & Tahsin</option>
+                <option value="Tahfidz Quran">Tahfidz Quran</option>
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Journals Grid */}

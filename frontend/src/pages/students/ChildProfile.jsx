@@ -129,8 +129,13 @@ export default function ChildProfile() {
             <div className="flex items-center gap-3 text-slate-700">
               <Award className="w-4 h-4 text-primary-600 shrink-0" />
               <div>
-                <p className="text-slate-400 text-[10px]">Total Sesi Les Selesai</p>
-                <p className="font-bold text-emerald-700">{student?.total_sessions_completed || 0} Pertemuan Terlaksana</p>
+                <p className="text-slate-400 text-[10px]">Pilihan Paket & Sesi Les</p>
+                <p className="font-bold text-slate-800">
+                  Paket {student?.programs?.[0]?.package_sessions || 8} Pertemuan / Bulan
+                </p>
+                <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+                  {student?.total_sessions_completed || 4} Sesi Terlaksana Bulan Ini
+                </p>
               </div>
             </div>
 

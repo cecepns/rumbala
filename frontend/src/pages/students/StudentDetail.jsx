@@ -140,7 +140,7 @@ export default function StudentDetail() {
           <div>
             <span className="text-slate-400 font-semibold block uppercase text-[10px]">Sesi Selesai</span>
             <span className="font-extrabold text-indigo-600 text-sm">{student.total_sessions_completed || 0} Pertemuan</span>
-            <span className="text-[10px] text-slate-400 block">Milestone 4/8/12</span>
+            <span className="text-[10px] text-slate-400 block">Paket 4/8/12 per Bulan</span>
           </div>
         </div>
       </div>
@@ -246,11 +246,16 @@ export default function StudentDetail() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-slate-900">{inv.invoice_number}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-primary-700 border border-slate-200">
+                      SPP {inv.period_month || "Bulanan"}
+                    </span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                       {inv.status === "paid" ? "Lunas" : "Belum Lunas"}
                     </span>
                   </div>
-                  <p className="text-slate-600 font-medium mt-1">{inv.milestone_name}</p>
+                  <p className="text-slate-600 font-medium mt-1">
+                    Progres: {inv.sessions_completed || 0}/{inv.package_sessions || 8} Pertemuan
+                  </p>
                   <p className="text-slate-400 text-[11px]">Jatuh Tempo: {formatDate(inv.due_date)}</p>
                 </div>
                 <div className="text-right">

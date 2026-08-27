@@ -187,15 +187,18 @@ export default function ParentDashboard() {
       </div>
 
       {/* SPP Bulanan Status Card */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Informasi Tagihan SPP
+            <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
+              Informasi Tagihan SPP Bulanan
             </span>
             <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
-              {latestInvoice?.milestone_name || "SPP Agustus 2026 – Paket 8 Pertemuan/Bulan – Lunas"}
+              SPP {latestInvoice?.period_month?.toUpperCase() || "AGUSTUS 2026"}
             </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Progres: <strong>{latestInvoice?.sessions_completed || 4}/{latestInvoice?.package_sessions || 8} pertemuan</strong>
+            </p>
           </div>
           <div>
             <span
@@ -205,9 +208,17 @@ export default function ParentDashboard() {
                   : "bg-amber-100 text-amber-800 border border-amber-200"
               }`}
             >
-              Status: {latestInvoice?.status === "paid" ? "Lunas (Terverifikasi)" : "Belum Lunas"}
+              Status: {latestInvoice?.status === "paid" ? "Lunas" : "Belum Lunas"}
             </span>
           </div>
+        </div>
+
+        {/* Milestone Capaian Banner */}
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center gap-2.5">
+          <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+          <p className="font-medium leading-relaxed">
+            Siswa telah menyelesaikan pertemuan ke <strong>{totalCompletedMonth || 4}</strong> dari <strong>{totalPackageMonth || 8}</strong> pertemuan bulan <strong>Agustus 2026</strong> dengan capaian baik.
+          </p>
         </div>
 
         {/* Breakdown Items */}

@@ -108,16 +108,20 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
 
           <div className="text-right space-y-1">
             <div>
-              <span className="text-slate-400 font-medium">Tanggal Diterbitkan: </span>
+              <span className="text-slate-400 font-medium">Periode SPP: </span>
+              <span className="font-extrabold text-primary-700">{invoice.period_month || "Agustus 2026"}</span>
+            </div>
+            <div>
+              <span className="text-slate-400 font-medium">Progres Sesi: </span>
+              <span className="font-semibold text-slate-800">{invoice.sessions_completed || 0} / {invoice.package_sessions || 8} Pertemuan</span>
+            </div>
+            <div>
+              <span className="text-slate-400 font-medium">Tanggal Terbit: </span>
               <span className="font-semibold text-slate-700">{formatDate(invoice.created_at || new Date())}</span>
             </div>
             <div>
               <span className="text-slate-400 font-medium">Jatuh Tempo: </span>
               <span className="font-semibold text-red-600">{formatDate(invoice.due_date)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 font-medium">Paket Tagihan: </span>
-              <span className="font-semibold text-primary-700">{invoice.milestone_name || 'Paket ' + invoice.sessions_count + ' Pertemuan'}</span>
             </div>
             {isPaid && invoice.paid_at && (
               <div>
@@ -134,23 +138,25 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
             <thead>
               <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase">
                 <th className="py-2.5 px-2">No</th>
-                <th className="py-2.5 px-2">Rincian Pembelajaran / Pertemuan</th>
-                <th className="py-2.5 px-2 text-right">Nominal</th>
+                <th className="py-2.5 px-2">Program & Paket Pembelajaran</th>
+                <th className="py-2.5 px-2 text-center">Paket Pertemuan</th>
+                <th className="py-2.5 px-2 text-right">Nominal SPP</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {invoice.items && invoice.items.length > 0 ? (
-                invoice.items.map((item, idx) => (
-                  <tr key={item.id || idx}>
-                    <td className="py-2.5 px-2 text-slate-500 font-medium">{idx + 1}</td>
-                    <td className="py-2.5 px-2">
-                      <p className="font-semibold text-slate-800">{item.description}</p>
-                      {item.session_date && (
-                        <p className="text-[11px] text-slate-400">Tanggal: {formatDate(item.session_date)}</p>
-                      )}
+              {invoice.items_json && invoice.items_json.length > 0 ? (
+                invoice.items_json.map((item, idx) => (
+                  <tr key={idx}>
+                    <td className="py-3 px-2 text-slate-500 font-medium">{idx + 1}</td>
+                    <td className="py-3 px-2">
+                      <p className="font-bold text-slate-900">{item.program_name}</p>
+                      <p className="text-[11px] text-slate-500">{item.unit_name || "Unit Riscon"} &bull; {item.class_type || "Semi Privat"}</p>
                     </td>
-                    <td className="py-2.5 px-2 text-right font-bold text-slate-800">
-                      {formatRupiah(item.amount)}
+                    <td className="py-3 px-2 text-center font-bold text-slate-700">
+                      {item.package || 8} Pertemuan / Bulan
+                    </td>
+                    <td className="py-3 px-2 text-right font-extrabold text-slate-900">
+                      {formatRupiah(item.fee || item.amount)}
                     </td>
                   </tr>
                 ))
@@ -158,10 +164,13 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
                 <tr>
                   <td className="py-3 px-2 text-slate-500">1</td>
                   <td className="py-3 px-2">
-                    <p className="font-semibold text-slate-800">{invoice.milestone_name}</p>
-                    <p className="text-[11px] text-slate-400">Total {invoice.sessions_count} Sesi Pembelajaran</p>
+                    <p className="font-bold text-slate-900">{invoice.program_name || "Bimbingan Belajar Rumbala"}</p>
+                    <p className="text-[11px] text-slate-500">Periode: {invoice.period_month || "Bulanan"}</p>
                   </td>
-                  <td className="py-3 px-2 text-right font-bold text-slate-800">
+                  <td className="py-3 px-2 text-center font-bold text-slate-700">
+                    {invoice.package_sessions || 8} Pertemuan / Bulan
+                  </td>
+                  <td className="py-3 px-2 text-right font-extrabold text-slate-900">
                     {formatRupiah(invoice.amount)}
                   </td>
                 </tr>
@@ -169,8 +178,8 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300">
-                <td colSpan="2" className="py-3 px-2 text-right font-bold text-sm text-slate-800">
-                  Total Tagihan:
+                <td colSpan="3" className="py-3 px-2 text-right font-bold text-sm text-slate-800">
+                  Total Tagihan SPP:
                 </td>
                 <td className="py-3 px-2 text-right font-extrabold text-base text-primary-700">
                   {formatRupiah(invoice.amount)}
@@ -180,8 +189,16 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
           </table>
         </div>
 
+        {/* Kebijakan Masa Berlaku Pertemuan */}
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            <strong>Ketentuan Paket Pertemuan:</strong> Baik paket 4, 8, maupun 12 sesi berlaku untuk 1 (satu) bulan berjalan. Jika pertemuan melewati di bulan yang sama maka pertemuannya akan <strong>hangus</strong>. Mohon dituntaskan pertemuan tersebut di bulan yang sama.
+          </p>
+        </div>
+
         {/* Payment Transfer Information */}
-        <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
+        <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
           <div>
             <p className="font-bold text-slate-800 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-primary-600" />
@@ -198,10 +215,10 @@ export default function PrintableInvoice({ invoice, onMarkAsPaid }) {
         </div>
 
         {/* Signature & Note Footer */}
-        <div className="mt-8 pt-4 border-t border-slate-100 flex items-end justify-between text-xs">
+        <div className="mt-6 pt-4 border-t border-slate-100 flex items-end justify-between text-xs">
           <div className="max-w-xs text-slate-400 text-[11px]">
             <p className="font-semibold text-slate-600">Catatan:</p>
-            <p>Terima kasih atas kepercayaan Bapak/Ibu mempercayakan bimbingan belajar ananda kepada Lembaga Rumbala.</p>
+            <p>Terima kasih atas kepercayaan Ayah/Bunda mempercayakan bimbingan belajar ananda kepada Lembaga Rumbala.</p>
           </div>
           <div className="text-center">
             <p className="text-slate-500 mb-10">Pengelola Lembaga Rumbala,</p>

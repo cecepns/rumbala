@@ -44,6 +44,7 @@ export default function AttendanceList() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [periodFilter, setPeriodFilter] = useState("Agustus 2026");
   const [statusFilter, setStatusFilter] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,6 +104,7 @@ export default function AttendanceList() {
         limit,
         search,
         date: dateFilter,
+        period: periodFilter,
         status: statusFilter
       };
 
@@ -122,7 +124,7 @@ export default function AttendanceList() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, dateFilter, statusFilter, role, selectedChildId, selectedProgram]);
+  }, [page, limit, search, dateFilter, periodFilter, statusFilter, role, selectedChildId, selectedProgram]);
 
   useEffect(() => {
     fetchOptions();
@@ -253,14 +255,34 @@ export default function AttendanceList() {
         />
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          {/* Filter Periode Bulanan */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+            <Calendar className="w-3.5 h-3.5 text-primary-600 shrink-0" />
+            <select
+              value={periodFilter}
+              onChange={(e) => {
+                setPeriodFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="Semua Periode">Semua Periode</option>
+              <option value="2026-08">Agustus 2026</option>
+              <option value="2026-07">Juli 2026</option>
+              <option value="2026-09">September 2026</option>
+              <option value="2026-10">Oktober 2026</option>
+            </select>
+          </div>
+
           <input
             type="date"
+            title="Filter Tanggal Spesifik"
             value={dateFilter}
             onChange={(e) => {
               setDateFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold"
+            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold cursor-pointer"
           />
 
           <select
@@ -269,9 +291,9 @@ export default function AttendanceList() {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold"
+            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold cursor-pointer"
           >
-            <option value="">Semua Status</option>
+            <option value="">Semua Status Sesi</option>
             <option value="hadir">Hadir Terlaksana</option>
             <option value="izin">Izin</option>
             <option value="sakit">Sakit</option>
