@@ -193,6 +193,293 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
 });
 
 // ==============================================================================
+// 1.1 USER MANAGEMENT (PENGELOLAAN AKUN & PENGGUNA)
+// ==============================================================================
+
+app.get('/api/users', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search ? req.query.search.trim() : '';
+    const role = req.query.role || '';
+
+    let whereClauses = [];
+    let params = [];
+
+    if (search) {
+      whereClauses.push('(u.name LIKE ? OR u.email LIKE ? OR u.username LIKE ? OR u.phone LIKE ?)');
+      const s = `%${search}%`;
+      params.push(s, s, s, s);
+    }
+
+    if (role && ['admin', 'tutor', 'parent'].includes(role)) {
+      whereClauses.push('u.role = ?');
+      params.push(role);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+    // Query stats
+    const [[stats]] = await db.query(`
+      SELECT 
+        COUNT(*) AS total_users,
+        SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS admin_count,
+        SUM(CASE WHEN role = 'tutor' THEN 1 ELSE 0 END) AS tutor_count,
+        SUM(CASE WHEN role = 'parent' THEN 1 ELSE 0 END) AS parent_count
+      FROM users
+    `);
+
+    // Total filtered count
+    const [countRows] = await db.query(`SELECT COUNT(DISTINCT u.id) as total FROM users u ${whereSql}`, params);
+    const total = countRows[0].total;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Fetch users with linked tutor & students information
+    const dataQuery = `
+      SELECT 
+        u.id, 
+        u.name, 
+        u.email, 
+        u.username, 
+        u.role, 
+        u.phone, 
+        u.avatar, 
+        u.created_at, 
+        u.updated_at,
+        t.id AS linked_tutor_id,
+        t.name AS linked_tutor_name,
+        GROUP_CONCAT(DISTINCT s.id SEPARATOR ',') AS linked_student_ids,
+        GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') AS linked_students_names
+      FROM users u
+      LEFT JOIN tutors t ON t.user_id = u.id
+      LEFT JOIN students s ON (s.user_id = u.id OR (u.role = 'parent' AND s.parent_phone = u.phone AND u.phone IS NOT NULL AND u.phone != ''))
+      ${whereSql}
+      GROUP BY u.id
+      ORDER BY u.id DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const [rows] = await db.query(dataQuery, [...params, limit, offset]);
+
+    res.json({
+      success: true,
+      data: rows,
+      stats: {
+        total: stats.total_users || 0,
+        admin: stats.admin_count || 0,
+        tutor: stats.tutor_count || 0,
+        parent: stats.parent_count || 0,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages
+      }
+    });
+  } catch (error) {
+    console.error('Fetch users error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT 
+        u.id, u.name, u.email, u.username, u.role, u.phone, u.avatar, u.created_at, u.updated_at,
+        t.id AS linked_tutor_id, t.name AS linked_tutor_name,
+        GROUP_CONCAT(DISTINCT s.id SEPARATOR ',') AS linked_student_ids,
+        GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') AS linked_students_names
+      FROM users u
+      LEFT JOIN tutors t ON t.user_id = u.id
+      LEFT JOIN students s ON (s.user_id = u.id OR (u.role = 'parent' AND s.parent_phone = u.phone))
+      WHERE u.id = ?
+      GROUP BY u.id`,
+      [req.params.id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Data pengguna tidak ditemukan.' });
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/users', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const { name, username, email, password, role, phone, linked_tutor_id, linked_student_ids } = req.body;
+
+    if (!name || !username || !email || !password || !role) {
+      return res.status(400).json({ success: false, message: 'Nama, username, email, password, dan peran (role) wajib diisi.' });
+    }
+
+    if (!['admin', 'tutor', 'parent'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'Role harus salah satu dari: admin, tutor, parent.' });
+    }
+
+    // Check duplicate username or email
+    const [existing] = await db.query(
+      'SELECT id, username, email FROM users WHERE username = ? OR email = ?',
+      [username.trim(), email.trim()]
+    );
+
+    if (existing.length > 0) {
+      if (existing.some(u => u.username.toLowerCase() === username.trim().toLowerCase())) {
+        return res.status(400).json({ success: false, message: 'Username sudah digunakan oleh akun lain. Gunakan username lain.' });
+      }
+      if (existing.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+        return res.status(400).json({ success: false, message: 'Email sudah terdaftar. Gunakan alamat email lain.' });
+      }
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const [result] = await db.query(
+      `INSERT INTO users (name, username, email, password, role, phone)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [name.trim(), username.trim(), email.trim(), hashedPassword, role, phone ? phone.trim() : null]
+    );
+
+    const newUserId = result.insertId;
+
+    // Link with Tutor if role === 'tutor' and linked_tutor_id provided
+    if (role === 'tutor' && linked_tutor_id) {
+      await db.query('UPDATE tutors SET user_id = ? WHERE id = ?', [newUserId, linked_tutor_id]);
+    }
+
+    // Link with Student(s) if role === 'parent' and linked_student_ids provided
+    if (role === 'parent') {
+      if (Array.isArray(linked_student_ids) && linked_student_ids.length > 0) {
+        await db.query('UPDATE students SET user_id = ? WHERE id IN (?)', [newUserId, linked_student_ids]);
+      } else if (linked_student_ids) {
+        await db.query('UPDATE students SET user_id = ? WHERE id = ?', [newUserId, linked_student_ids]);
+      } else if (phone) {
+        // Auto link students with same parent_phone if no student_ids specified
+        await db.query('UPDATE students SET user_id = ? WHERE parent_phone = ?', [newUserId, phone.trim()]);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Akun ${role.toUpperCase()} "${name}" berhasil dibuat.`,
+      id: newUserId
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Gagal membuat akun pengguna.' });
+  }
+});
+
+app.put('/api/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { name, username, email, password, role, phone, linked_tutor_id, linked_student_ids } = req.body;
+
+    if (!name || !username || !email || !role) {
+      return res.status(400).json({ success: false, message: 'Nama, username, email, dan peran (role) wajib diisi.' });
+    }
+
+    // Check duplicate username or email excluding current user
+    const [existing] = await db.query(
+      'SELECT id, username, email FROM users WHERE (username = ? OR email = ?) AND id != ?',
+      [username.trim(), email.trim(), userId]
+    );
+
+    if (existing.length > 0) {
+      if (existing.some(u => u.username.toLowerCase() === username.trim().toLowerCase())) {
+        return res.status(400).json({ success: false, message: 'Username sudah digunakan oleh akun lain.' });
+      }
+      if (existing.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+        return res.status(400).json({ success: false, message: 'Email sudah terdaftar pada akun lain.' });
+      }
+    }
+
+    if (password && password.trim().length > 0) {
+      const hashedPassword = await bcrypt.hash(password.trim(), 10);
+      await db.query(
+        `UPDATE users SET name = ?, username = ?, email = ?, password = ?, role = ?, phone = ? WHERE id = ?`,
+        [name.trim(), username.trim(), email.trim(), hashedPassword, role, phone ? phone.trim() : null, userId]
+      );
+    } else {
+      await db.query(
+        `UPDATE users SET name = ?, username = ?, email = ?, role = ?, phone = ? WHERE id = ?`,
+        [name.trim(), username.trim(), email.trim(), role, phone ? phone.trim() : null, userId]
+      );
+    }
+
+    // Update linkages
+    if (role === 'tutor') {
+      // Clear old tutor association
+      await db.query('UPDATE tutors SET user_id = NULL WHERE user_id = ?', [userId]);
+      if (linked_tutor_id) {
+        await db.query('UPDATE tutors SET user_id = ? WHERE id = ?', [userId, linked_tutor_id]);
+      }
+    } else if (role === 'parent') {
+      // Clear old student association
+      await db.query('UPDATE students SET user_id = NULL WHERE user_id = ?', [userId]);
+      if (Array.isArray(linked_student_ids) && linked_student_ids.length > 0) {
+        await db.query('UPDATE students SET user_id = ? WHERE id IN (?)', [userId, linked_student_ids]);
+      } else if (linked_student_ids) {
+        await db.query('UPDATE students SET user_id = ? WHERE id = ?', [userId, linked_student_ids]);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Data akun "${name}" berhasil diperbarui.`
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/users/:id/reset-password', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { new_password } = req.body;
+    const passwordToSet = new_password && new_password.trim() ? new_password.trim() : 'password123';
+
+    const hashedPassword = await bcrypt.hash(passwordToSet, 10);
+    await db.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, userId]);
+
+    res.json({
+      success: true,
+      message: `Password akun berhasil direset menjadi: "${passwordToSet}". Silakan berikan ke pengguna.`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    if (parseInt(req.user.id) === parseInt(userId)) {
+      return res.status(400).json({ success: false, message: 'Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif digunakan.' });
+    }
+
+    // Unlink tutors and students
+    await db.query('UPDATE tutors SET user_id = NULL WHERE user_id = ?', [userId]);
+    await db.query('UPDATE students SET user_id = NULL WHERE user_id = ?', [userId]);
+
+    // Delete user
+    await db.query('DELETE FROM users WHERE id = ?', [userId]);
+
+    res.json({ success: true, message: 'Akun pengguna berhasil dihapus dari sistem.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==============================================================================
 // 2. SETTINGS (PENGATURAN GLOBAL SISTEM)
 // ==============================================================================
 
@@ -747,7 +1034,12 @@ app.get('/api/students', authenticateToken, async (req, res) => {
     const totalPages = Math.ceil(total / limit) || 1;
 
     const [rows] = await db.query(
-      `SELECT s.* FROM students s ${whereClause} ORDER BY s.id DESC LIMIT ? OFFSET ?`,
+      `SELECT s.*, u.username as parent_username, u.email as parent_user_email 
+       FROM students s 
+       LEFT JOIN users u ON (u.id = s.user_id OR (u.role = 'parent' AND s.parent_phone = u.phone AND u.phone IS NOT NULL AND u.phone != ''))
+       ${whereClause} 
+       GROUP BY s.id
+       ORDER BY s.id DESC LIMIT ? OFFSET ?`,
       [...queryParams, limit, offset]
     );
 
@@ -782,7 +1074,13 @@ app.get('/api/students', authenticateToken, async (req, res) => {
 app.get('/api/students/:id', authenticateToken, async (req, res) => {
   try {
     const studentId = req.params.id;
-    const [students] = await db.query('SELECT * FROM students WHERE id = ?', [studentId]);
+    const [students] = await db.query(
+      `SELECT s.*, u.username as parent_username, u.email as parent_user_email 
+       FROM students s 
+       LEFT JOIN users u ON (u.id = s.user_id OR (u.role = 'parent' AND s.parent_phone = u.phone))
+       WHERE s.id = ?`,
+      [studentId]
+    );
     if (students.length === 0) {
       return res.status(404).json({ success: false, message: 'Data siswa tidak ditemukan.' });
     }
@@ -814,15 +1112,43 @@ app.get('/api/students/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/students', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
-    const { name, nickname, birth_date, parent_name, parent_phone, parent_email, address, class_grade, school, subjects, tuition_fee_per_session, status, notes, initial_programs } = req.body;
+    const { 
+      name, nickname, birth_date, parent_name, parent_phone, parent_email, 
+      address, class_grade, school, subjects, tuition_fee_per_session, status, 
+      notes, initial_programs, create_parent_account, parent_username, parent_password 
+    } = req.body;
+    
     if (!name || !parent_name || !parent_phone) {
       return res.status(400).json({ success: false, message: 'Nama anak, nama orang tua, dan nomor WA wajib diisi.' });
     }
 
+    let parentUserId = null;
+
+    // Check if user account with same phone exists
+    const [existingParent] = await db.query('SELECT id FROM users WHERE phone = ? AND role = "parent"', [parent_phone.trim()]);
+    if (existingParent.length > 0) {
+      parentUserId = existingParent[0].id;
+    } else if (create_parent_account || (parent_username && parent_password)) {
+      const uname = (parent_username || `ortu.${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`).trim();
+      const email = (parent_email || `${uname}@rumbala.com`).trim();
+      const rawPass = parent_password && parent_password.trim() ? parent_password.trim() : 'password123';
+
+      // Check if username/email already exists
+      const [dup] = await db.query('SELECT id FROM users WHERE username = ? OR email = ?', [uname, email]);
+      if (dup.length === 0) {
+        const hashed = await bcrypt.hash(rawPass, 10);
+        const [uRes] = await db.query(
+          `INSERT INTO users (name, username, email, password, role, phone) VALUES (?, ?, ?, ?, 'parent', ?)`,
+          [parent_name.trim(), uname, email, hashed, parent_phone.trim()]
+        );
+        parentUserId = uRes.insertId;
+      }
+    }
+
     const [result] = await db.query(
-      `INSERT INTO students (name, nickname, birth_date, parent_name, parent_phone, parent_email, address, class_grade, school, subjects, tuition_fee_per_session, status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, nickname || '', birth_date || null, parent_name, parent_phone, parent_email || '', address || '', class_grade || 'SD', school || '', subjects || 'Cermat Matematika', tuition_fee_per_session || 100000, status || 'active', notes || '']
+      `INSERT INTO students (user_id, name, nickname, birth_date, parent_name, parent_phone, parent_email, address, class_grade, school, subjects, tuition_fee_per_session, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [parentUserId, name, nickname || '', birth_date || null, parent_name, parent_phone, parent_email || '', address || '', class_grade || 'SD', school || '', subjects || 'Cermat Matematika', tuition_fee_per_session || 100000, status || 'active', notes || '']
     );
     const studentId = result.insertId;
 
@@ -925,19 +1251,24 @@ app.delete('/api/student-programs/:id', authenticateToken, requireRole('admin'),
 app.get('/api/tutors', authenticateToken, async (req, res) => {
   try {
     const { search, status } = req.query;
-    let query = 'SELECT * FROM tutors WHERE 1=1';
+    let query = `
+      SELECT t.*, u.username AS user_username, u.email AS user_email 
+      FROM tutors t 
+      LEFT JOIN users u ON (u.id = t.user_id OR (u.role = 'tutor' AND (u.email = t.email OR u.phone = t.phone)))
+      WHERE 1=1
+    `;
     const params = [];
 
     if (search) {
-      query += ' AND (name LIKE ? OR email LIKE ? OR phone LIKE ? OR subjects LIKE ?)';
+      query += ' AND (t.name LIKE ? OR t.email LIKE ? OR t.phone LIKE ? OR t.subjects LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (status) {
-      query += ' AND status = ?';
+      query += ' AND t.status = ?';
       params.push(status);
     }
 
-    query += ' ORDER BY name ASC';
+    query += ' GROUP BY t.id ORDER BY t.name ASC';
     const [rows] = await db.query(query, params);
 
     // Attach flexible rates for each tutor
@@ -954,7 +1285,13 @@ app.get('/api/tutors', authenticateToken, async (req, res) => {
 
 app.get('/api/tutors/:id', authenticateToken, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM tutors WHERE id = ?', [req.params.id]);
+    const [rows] = await db.query(
+      `SELECT t.*, u.username AS user_username, u.email AS user_email 
+       FROM tutors t 
+       LEFT JOIN users u ON (u.id = t.user_id OR (u.role = 'tutor' AND (u.email = t.email OR u.phone = t.phone)))
+       WHERE t.id = ?`,
+      [req.params.id]
+    );
     if (rows.length === 0) return res.status(404).json({ success: false, message: 'Tutor tidak ditemukan.' });
     const tutor = rows[0];
 
@@ -969,13 +1306,36 @@ app.get('/api/tutors/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/tutors', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
-    const { name, email, phone, subjects, units_teaching, class_types, fee_per_session, bio, status, rates } = req.body;
+    const { 
+      name, email, phone, subjects, units_teaching, class_types, 
+      fee_per_session, bio, status, rates, create_tutor_account, 
+      tutor_username, tutor_password 
+    } = req.body;
+
     if (!name || !phone) return res.status(400).json({ success: false, message: 'Nama dan nomor telepon tutor wajib diisi.' });
 
+    let tutorUserId = null;
+
+    if (create_tutor_account || (tutor_username && tutor_password)) {
+      const uname = (tutor_username || `tutor.${name.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '')}`).trim();
+      const uemail = (email || `${uname}@rumbala.com`).trim();
+      const rawPass = tutor_password && tutor_password.trim() ? tutor_password.trim() : 'password123';
+
+      const [dup] = await db.query('SELECT id FROM users WHERE username = ? OR email = ?', [uname, uemail]);
+      if (dup.length === 0) {
+        const hashed = await bcrypt.hash(rawPass, 10);
+        const [uRes] = await db.query(
+          `INSERT INTO users (name, username, email, password, role, phone) VALUES (?, ?, ?, ?, 'tutor', ?)`,
+          [name.trim(), uname, uemail, hashed, phone.trim()]
+        );
+        tutorUserId = uRes.insertId;
+      }
+    }
+
     const [result] = await db.query(
-      `INSERT INTO tutors (name, email, phone, subjects, units_teaching, class_types, fee_per_session, bio, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email || '', phone, subjects || 'Cermat Matematika', units_teaching || 'Unit Riscon Rancaekek', class_types || 'Semi Privat, Privat di Tempat Les', fee_per_session || 75000, bio || '', status || 'active']
+      `INSERT INTO tutors (user_id, name, email, phone, subjects, units_teaching, class_types, fee_per_session, bio, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tutorUserId, name, email || '', phone, subjects || 'Cermat Matematika', units_teaching || 'Unit Riscon Rancaekek', class_types || 'Semi Privat, Privat di Tempat Les', fee_per_session || 75000, bio || '', status || 'active']
     );
     const tutorId = result.insertId;
 

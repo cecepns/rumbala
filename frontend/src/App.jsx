@@ -16,6 +16,7 @@ import StudentDetail from "./pages/students/StudentDetail";
 import ChildProfile from "./pages/students/ChildProfile";
 import TutorList from "./pages/tutors/TutorList";
 import TutorProfile from "./pages/tutors/TutorProfile";
+import UserList from "./pages/users/UserList";
 import ProgramMasterList from "./pages/programs/ProgramMasterList";
 import UnitMasterList from "./pages/units/UnitMasterList";
 import ScheduleList from "./pages/schedules/ScheduleList";
@@ -61,6 +62,7 @@ function ProtectedLayout() {
               <Route path="/child-profile" element={<ChildProfile />} />
               <Route path="/tutors" element={<TutorList />} />
               <Route path="/tutor-profile" element={<TutorProfile />} />
+              <Route path="/users" element={<UserList />} />
               <Route path="/programs-master" element={<ProgramMasterList />} />
               <Route path="/units-master" element={<UnitMasterList />} />
               <Route path="/schedules" element={<ScheduleList />} />

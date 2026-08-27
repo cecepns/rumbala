@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { LogIn, ShieldCheck, UserCheck, Users, Sparkles, BookOpen, KeyRound, User } from "lucide-react";
+import { LogIn, KeyRound, User } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -16,17 +16,6 @@ export default function Login() {
     if (!username || !password) return;
     setIsLoading(true);
     const success = await login(username, password);
-    setIsLoading(false);
-    if (success) {
-      navigate("/dashboard");
-    }
-  };
-
-  const handleQuickLogin = async (quickUsername, quickPassword) => {
-    setUsername(quickUsername);
-    setPassword(quickPassword);
-    setIsLoading(true);
-    const success = await login(quickUsername, quickPassword);
     setIsLoading(false);
     if (success) {
       navigate("/dashboard");
@@ -97,41 +86,6 @@ export default function Login() {
               {isLoading ? "Memproses Masuk..." : "Masuk ke Rumbala"}
             </button>
           </form>
-
-          {/* Quick Demo Login Triggers */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center mb-3">
-              Akses Cepat Demo Akun
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("admin", "password123")}
-                className="flex flex-col items-center p-2.5 rounded-xl border border-indigo-100 bg-indigo-50/70 hover:bg-indigo-100/70 text-indigo-800 transition-colors text-center group cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4 mb-1 text-indigo-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold">Admin</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("tutor.sarah", "password123")}
-                className="flex flex-col items-center p-2.5 rounded-xl border border-emerald-100 bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-800 transition-colors text-center group cursor-pointer"
-              >
-                <UserCheck className="w-4 h-4 mb-1 text-emerald-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold">Tutor</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("wali.keenan", "password123")}
-                className="flex flex-col items-center p-2.5 rounded-xl border border-amber-100 bg-amber-50/70 hover:bg-amber-100/70 text-amber-800 transition-colors text-center group cursor-pointer"
-              >
-                <Users className="w-4 h-4 mb-1 text-amber-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold">Orang Tua</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-sky-200/70">

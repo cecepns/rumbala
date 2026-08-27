@@ -19,6 +19,7 @@ import {
   BookOpen,
   MapPin,
   Settings,
+  UserCog,
   X
 } from "lucide-react";
 
@@ -56,11 +57,12 @@ export default function Sidebar({ isOpen, onClose }) {
       { name: "Profil Tutor", href: "/tutor-profile", icon: GraduationCap },
     ];
   } else {
-    // Admin navigation (16 menu lengkap sesuai spesifikasi)
+    // Admin navigation
     navigation = [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { name: "Data Siswa", href: "/students", icon: Users },
       { name: "Data Tutor", href: "/tutors", icon: GraduationCap },
+      { name: "Manajemen Akun", href: "/users", icon: UserCog, badge: "Akun" },
       { name: "Program & Kelas", href: "/programs-master", icon: BookOpen },
       { name: "Unit & Lokasi", href: "/units-master", icon: MapPin },
       { name: "Jadwal Les", href: "/schedules", icon: CalendarDays },

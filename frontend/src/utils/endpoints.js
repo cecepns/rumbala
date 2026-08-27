@@ -4,6 +4,14 @@ export const API_ENDPOINTS = {
     REGISTER: "/auth/register",
     PROFILE: "/auth/profile",
   },
+  USERS: {
+    LIST: "/users",
+    DETAIL: (id) => `/users/${id}`,
+    CREATE: "/users",
+    UPDATE: (id) => `/users/${id}`,
+    DELETE: (id) => `/users/${id}`,
+    RESET_PASSWORD: (id) => `/users/${id}/reset-password`,
+  },
   SETTINGS: {
     LIST: "/settings",
     UPDATE: "/settings",
