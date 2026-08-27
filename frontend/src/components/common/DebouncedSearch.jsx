@@ -5,19 +5,32 @@ import { useDebounce } from "../../hooks/useDebounce";
 export default function DebouncedSearch({
   placeholder = "Cari data...",
   onSearch,
+  onChange,
+  value: controlledValue,
   delay = 350,
   className = "",
 }) {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(controlledValue || "");
   const debouncedValue = useDebounce(searchTerm, delay);
+  const searchCallback = onSearch || onChange;
 
   useEffect(() => {
-    onSearch(debouncedValue);
-  }, [debouncedValue, onSearch]);
+    if (controlledValue !== undefined && controlledValue !== searchTerm) {
+      setSearchTerm(controlledValue || "");
+    }
+  }, [controlledValue]);
+
+  useEffect(() => {
+    if (typeof searchCallback === "function") {
+      searchCallback(debouncedValue);
+    }
+  }, [debouncedValue, searchCallback]);
 
   const handleClear = () => {
     setSearchTerm("");
-    onSearch("");
+    if (typeof searchCallback === "function") {
+      searchCallback("");
+    }
   };
 
   return (
