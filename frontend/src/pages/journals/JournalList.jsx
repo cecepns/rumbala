@@ -18,7 +18,10 @@ import {
   CheckCircle,
   FileText,
   Target,
-  ArrowRight
+  ArrowRight,
+  Building2,
+  BookmarkCheck,
+  CheckCircle2
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -57,6 +60,51 @@ export default function JournalList() {
     fetchJournals();
   }, [fetchJournals]);
 
+  // Render flexible evaluation rubric badge or cards
+  const renderEvaluationRubric = (j) => {
+    const rubric = j.evaluation_json || {};
+    const hasRubric = Object.keys(rubric).length > 0;
+
+    if (hasRubric) {
+      return (
+        <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+          <span className="text-[10px] font-extrabold uppercase text-slate-500 block">
+            Rubrik Capaian Pembelajaran:
+          </span>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {Object.entries(rubric).map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between bg-white px-2.5 py-1 rounded-lg border border-slate-100">
+                <span className="text-[11px] text-slate-500 capitalize">{k.replace(/_/g, " ")}:</span>
+                <span className="font-bold text-slate-800 text-[11px]">{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Default Fallback
+    return (
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        {j.score && (
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-100 flex items-center gap-1">
+            <Award className="w-3.5 h-3.5 text-emerald-600" /> Nilai Sesi: {j.score}/100
+          </span>
+        )}
+        {j.fluency_rating && (
+          <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 font-semibold border border-blue-100">
+            Kelancaran: {j.fluency_rating}
+          </span>
+        )}
+        {j.makhraj_rating && (
+          <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 font-semibold border border-purple-100">
+            Makhraj/Tajwid: {j.makhraj_rating}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -65,12 +113,10 @@ export default function JournalList() {
           {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Jurnal"}
         </span>
         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-          {role === "parent" ? "Jurnal Belajar Ananda" : "Jurnal Mengajar & Evaluasi Sesi"}
+          {role === "parent" ? "Jurnal Belajar Ananda" : "Jurnal Mengajar & Evaluasi Singkat"}
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          {role === "parent"
-            ? "Catatan detail materi, target yang tuntas dicapai, nilai/rubrik capaian, tugas rumah, dan target pertemuan berikutnya per program."
-            : "Riwayat pencatatan materi pembelajaran dan evaluasi capaian siswa per sesi les."}
+          Catatan materi pembelajaran, capaian ringkas per pertemuan (Pertemuan X dari Y – Periode), tugas rumah, dan evaluasi fleksibel per program.
         </p>
       </div>
 
@@ -79,10 +125,9 @@ export default function JournalList() {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="w-full sm:w-72">
+        <div className="w-full sm:w-80">
           <DebouncedSearch
-            value={search}
-            onChange={setSearch}
+            onSearch={setSearch}
             placeholder="Cari materi, topik, atau capaian..."
           />
         </div>
@@ -98,8 +143,9 @@ export default function JournalList() {
               <option value="Semua Program">Semua Program</option>
               <option value="Cermat Matematika">Cermat Matematika</option>
               <option value="English BEC">English BEC</option>
-              <option value="Mengaji & Tahfidz">Mengaji & Tahfidz</option>
-              <option value="Pracalis Calistung">Pracalis Calistung</option>
+              <option value="Prisma Kalkulator Tangan">Prisma Kalkulator Tangan</option>
+              <option value="Mengaji & Tahsin">Mengaji & Tahsin</option>
+              <option value="Tahfidz Quran">Tahfidz Quran</option>
             </select>
           </div>
         )}
@@ -122,97 +168,66 @@ export default function JournalList() {
               className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:border-primary-300 transition-all flex flex-col justify-between space-y-4"
             >
               <div>
-                {/* Header: Student, Program, Session x of y */}
+                {/* Header: Session X of Y – Period */}
                 <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div>
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-primary-50 text-primary-700">
-                        {j.unit_name || "Unit Riscon Rancaekek"}
+                      <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 text-[11px] font-extrabold">
+                        Pertemuan {j.session_number || 1} dari {j.package_total || 8} &ndash; {j.period_month || "Agustus 2026"}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400">
                         {formatDate(j.date)}
                       </span>
                     </div>
-                    <h3 className="text-base font-extrabold text-slate-900 mt-1">
-                      {j.topic}
-                    </h3>
-                    <p className="text-xs font-semibold text-primary-700 mt-0.5">
-                      {j.program_name} &bull; <span className="text-slate-700">{j.student_name}</span>
+
+                    <h2 className="text-base font-extrabold text-slate-900 mt-1">
+                      {j.topic || "Materi Pembelajaran"}
+                    </h2>
+
+                    <p className="text-xs font-semibold text-primary-700">
+                      {j.program_name} &bull; <span className="text-slate-800">{j.student_name}</span> ({j.class_grade})
                     </p>
                   </div>
 
-                  <span className="px-2.5 py-1 rounded-xl text-xs font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
-                    Pertemuan #{j.session_number || 1}/{j.package_total || 8}
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">
+                    {j.unit_name || "Unit Riscon"}
                   </span>
                 </div>
 
-                {/* Achieved Targets */}
-                <div className="mt-4 space-y-2.5 text-xs text-slate-700">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Target & Capaian Sesi:
-                    </span>
-                    <p className="mt-1 font-medium text-slate-800 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      {j.targets_achieved}
-                    </p>
-                  </div>
-
-                  {/* Progress Notes */}
-                  {j.progress_notes && (
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Catatan Tutor:
-                      </span>
-                      <p className="mt-0.5 text-slate-600 italic leading-relaxed">
-                        "{j.progress_notes}"
-                      </p>
+                {/* Body Content */}
+                <div className="mt-3.5 space-y-2.5 text-xs text-slate-600">
+                  {/* Targets Achieved */}
+                  {j.targets_achieved && (
+                    <div className="flex items-start gap-2 bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 text-emerald-950">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed"><strong>Capaian Sesi:</strong> {j.targets_achieved}</p>
                     </div>
                   )}
 
-                  {/* Rubric and Evaluation Badges */}
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    {j.score && (
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center gap-1">
-                        <Award className="w-3.5 h-3.5" />
-                        Skor: {j.score}/100
-                      </span>
-                    )}
-                    {j.fluency_rating && (
-                      <span className="px-2.5 py-1 rounded-lg bg-sky-100 text-sky-800 font-bold text-xs">
-                        Kelancaran: {j.fluency_rating}
-                      </span>
-                    )}
-                    {j.makhraj_rating && (
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-xs">
-                        Makhraj: {j.makhraj_rating}
-                      </span>
-                    )}
-                    {j.tajwid_rating && (
-                      <span className="px-2.5 py-1 rounded-lg bg-teal-100 text-teal-800 font-bold text-xs">
-                        Tajwid: {j.tajwid_rating}
-                      </span>
-                    )}
-                    {j.memorization_surah && (
-                      <span className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 font-bold text-xs">
-                        Setoran: {j.memorization_surah}
-                      </span>
-                    )}
-                  </div>
+                  {/* Flexible Evaluation Rubrics */}
+                  {renderEvaluationRubric(j)}
+
+                  {/* Homework */}
+                  {j.homework && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50/60 border border-amber-100 text-amber-950">
+                      <BookmarkCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p><strong>PR / Latihan Mandiri di Buku Fisik:</strong> {j.homework}</p>
+                    </div>
+                  )}
+
+                  {/* Progress Notes */}
+                  {j.progress_notes && (
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 italic">
+                      "{j.progress_notes}"
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Homework & Next Target Footer */}
-              <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                {j.homework && (
-                  <div className="p-2 rounded-lg bg-amber-50/60 text-amber-900 border border-amber-100">
-                    <span className="font-bold">📝 PR / Tugas:</span> {j.homework}
-                  </div>
-                )}
-                {j.next_target && (
-                  <div className="p-2 rounded-lg bg-sky-50/60 text-sky-900 border border-sky-100">
-                    <span className="font-bold">🎯 Target Selanjutnya:</span> {j.next_target}
-                  </div>
-                )}
+              {/* Footer: Tutor signature */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+                <span>👩‍🏫 Tutor: <strong>{j.tutor_name || "Tutor Pengajar"}</strong></span>
+                <span className="text-emerald-700 font-bold">✓ Terverifikasi Presensi</span>
               </div>
             </div>
           ))}

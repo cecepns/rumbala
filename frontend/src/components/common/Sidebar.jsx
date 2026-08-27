@@ -16,6 +16,9 @@ import {
   CalendarClock,
   UserCheck,
   User,
+  BookOpen,
+  MapPin,
+  Settings,
   X
 } from "lucide-react";
 
@@ -48,24 +51,29 @@ export default function Sidebar({ isOpen, onClose }) {
       { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck },
       { name: "Progress Belajar", href: "/progress", icon: TrendingUp },
       { name: "Generate Laporan AI", href: "/ai-reports", icon: Sparkles, badge: "AI" },
+      { name: "Rekap Kehadiran Saya", href: "/tutor-attendance", icon: UserCheck },
       { name: "Rekap Mengajar & Honor", href: "/tutor-recaps", icon: Award },
-      { name: "Profil Tutor", href: "/tutor-profile", icon: UserCheck },
+      { name: "Profil Tutor", href: "/tutor-profile", icon: GraduationCap },
     ];
   } else {
-    // Admin navigation
+    // Admin navigation (16 menu lengkap sesuai spesifikasi)
     navigation = [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { name: "Data Siswa", href: "/students", icon: Users },
       { name: "Data Tutor", href: "/tutors", icon: GraduationCap },
+      { name: "Program & Kelas", href: "/programs-master", icon: BookOpen },
+      { name: "Unit & Lokasi", href: "/units-master", icon: MapPin },
       { name: "Jadwal Les", href: "/schedules", icon: CalendarDays },
       { name: "Absensi", href: "/attendance", icon: CheckSquare },
       { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock },
       { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck },
       { name: "Progress Belajar", href: "/progress", icon: TrendingUp },
-      { name: "Laporan AI Siswa", href: "/ai-reports", icon: Sparkles, badge: "AI" },
-      { name: "Invoice & SPP", href: "/invoices", icon: Receipt },
+      { name: "Laporan Perkembangan", href: "/ai-reports", icon: Sparkles, badge: "AI" },
+      { name: "Invoice & Tagihan", href: "/invoices", icon: Receipt, badge: "SPP" },
       { name: "Rekap Keuangan", href: "/finances", icon: CircleDollarSign },
-      { name: "Rekap Honor Tutor", href: "/tutor-recaps", icon: Award },
+      { name: "Rekap Kehadiran Tutor", href: "/tutor-attendance", icon: UserCheck },
+      { name: "Rekap Mengajar & Honor", href: "/tutor-recaps", icon: Award },
+      { name: "Pengaturan", href: "/settings", icon: Settings },
     ];
   }
 

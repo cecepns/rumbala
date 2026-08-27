@@ -6,8 +6,10 @@ USE `rumbala_db`;
 
 -- Drop tables if exists in correct foreign key order
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `settings`;
 DROP TABLE IF EXISTS `reschedule_requests`;
 DROP TABLE IF EXISTS `student_programs`;
+DROP TABLE IF EXISTS `tutor_rates`;
 DROP TABLE IF EXISTS `programs`;
 DROP TABLE IF EXISTS `units`;
 DROP TABLE IF EXISTS `ai_reports`;
@@ -38,28 +40,45 @@ CREATE TABLE `users` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2. Units Table (Cabang / Unit Belajar Rumbala)
+-- 2. Settings Table (Pengaturan Global Sistem)
+CREATE TABLE `settings` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `key_name` VARCHAR(100) NOT NULL UNIQUE,
+  `value` TEXT NOT NULL,
+  `description` VARCHAR(255) NULL,
+  `category` VARCHAR(50) NOT NULL DEFAULT 'general',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 3. Units Table (Cabang / Unit Belajar Rumbala)
 CREATE TABLE `units` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(150) NOT NULL,
   `address` TEXT NULL,
   `phone` VARCHAR(30) NULL,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 3. Programs Master Table (Program Les Rumbala)
+-- 4. Programs Master Table (Program Les & Sistem Evaluasi Rumbala)
 CREATE TABLE `programs` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(150) NOT NULL,
+  `code` VARCHAR(50) NULL,
   `category` ENUM('akademik', 'quran', 'bahasa', 'pracalis', 'lainnya') NOT NULL DEFAULT 'akademik',
+  `evaluation_type` ENUM('math', 'english', 'prisma', 'mengaji', 'tahfidz', 'general') NOT NULL DEFAULT 'general',
   `default_fee` DECIMAL(12, 2) NOT NULL DEFAULT 350000.00,
+  `default_fee_per_session` DECIMAL(12, 2) NOT NULL DEFAULT 43750.00,
+  `default_tutor_fee` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
   `description` TEXT NULL,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 4. Tutors Table
+-- 5. Tutors Table
 CREATE TABLE `tutors` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `user_id` INT NULL,
@@ -68,7 +87,7 @@ CREATE TABLE `tutors` (
   `phone` VARCHAR(30) NOT NULL,
   `subjects` VARCHAR(255) NOT NULL,
   `units_teaching` VARCHAR(255) NULL DEFAULT 'Unit Riscon Rancaekek, Unit Panorama Jatinangor',
-  `class_types` VARCHAR(255) NULL DEFAULT 'Privat, Semi Privat, Online',
+  `class_types` VARCHAR(255) NULL DEFAULT 'Semi Privat, Privat di Tempat Les, Online Privat, Privat Home Visit',
   `fee_per_session` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `bio` TEXT NULL,
@@ -77,7 +96,22 @@ CREATE TABLE `tutors` (
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. Students Table (Anak / Siswa)
+-- 6. Tutor Rates Table (Tarif Fleksibel per Program & Jenis Kelas + Transport)
+CREATE TABLE `tutor_rates` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tutor_id` INT NOT NULL,
+  `program_name` VARCHAR(150) NOT NULL,
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
+  `duration_minutes` INT NOT NULL DEFAULT 90,
+  `rate_per_session` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
+  `transport_fee` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `notes` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. Students Table (Anak / Siswa)
 CREATE TABLE `students` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `user_id` INT NULL, -- ID Orang Tua di tabel users (1 ortu bisa punya > 1 anak)
@@ -101,17 +135,24 @@ CREATE TABLE `students` (
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 6. Student Programs Table (Multi-Program per Anak)
+-- 8. Student Programs Table (Multi-Program per Anak dengan Pengaturan Mandiri)
 CREATE TABLE `student_programs` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `student_id` INT NOT NULL,
   `program_name` VARCHAR(150) NOT NULL,
   `unit_name` VARCHAR(150) NOT NULL DEFAULT 'Unit Riscon Rancaekek',
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
   `tutor_id` INT NULL,
   `package_sessions` INT NOT NULL DEFAULT 8, -- 4, 8, or 12 sessions/month
   `monthly_fee` DECIMAL(12, 2) NOT NULL DEFAULT 350000.00,
-  `completed_sessions_month` INT NOT NULL DEFAULT 0, -- e.g. 4/8
+  `completed_sessions_month` INT NOT NULL DEFAULT 0, -- e.g. 6/8
   `schedule_info` VARCHAR(255) NULL, -- e.g. "Senin & Rabu 15.30-17.00"
+  `initial_level` VARCHAR(150) NULL,
+  `strengths` TEXT NULL,
+  `areas_for_improvement` TEXT NULL,
+  `learning_targets` TEXT NULL,
+  `special_needs` TEXT NULL,
+  `important_notes` TEXT NULL,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -119,18 +160,22 @@ CREATE TABLE `student_programs` (
   FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 7. Schedules Table
+-- 9. Schedules Table
 CREATE TABLE `schedules` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `student_id` INT NOT NULL,
   `tutor_id` INT NOT NULL,
   `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
   `unit_name` VARCHAR(150) NOT NULL DEFAULT 'Unit Riscon Rancaekek',
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
   `day_of_week` ENUM('Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu') NOT NULL,
   `start_time` TIME NOT NULL,
   `end_time` TIME NOT NULL,
+  `duration_minutes` INT NOT NULL DEFAULT 90,
   `subject` VARCHAR(100) NOT NULL,
   `location_type` ENUM('offline', 'online') NOT NULL DEFAULT 'offline',
+  `is_home_visit` TINYINT(1) NOT NULL DEFAULT 0,
+  `home_address` TEXT NULL,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `notes` VARCHAR(255) NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -139,7 +184,7 @@ CREATE TABLE `schedules` (
   FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 8. Attendances Table (Riwayat Kehadiran Sesi Les)
+-- 10. Attendances Table (Riwayat Kehadiran Sesi Les)
 CREATE TABLE `attendances` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `student_id` INT NOT NULL,
@@ -147,14 +192,20 @@ CREATE TABLE `attendances` (
   `schedule_id` INT NULL,
   `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
   `unit_name` VARCHAR(150) NOT NULL DEFAULT 'Unit Riscon Rancaekek',
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
+  `is_home_visit` TINYINT(1) NOT NULL DEFAULT 0,
   `date` DATE NOT NULL,
   `start_time` TIME NOT NULL,
   `end_time` TIME NOT NULL,
+  `duration_minutes` INT NOT NULL DEFAULT 90,
   `status` ENUM('hadir', 'izin', 'sakit', 'alfa') NOT NULL DEFAULT 'hadir',
   `session_number` INT NOT NULL DEFAULT 1,
   `package_total` INT NOT NULL DEFAULT 8,
   `parent_confirmed` TINYINT(1) NOT NULL DEFAULT 0,
   `billed` TINYINT(1) NOT NULL DEFAULT 0,
+  `tutor_session_fee` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
+  `tutor_transport_fee` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `tutor_total_honor` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
   `notes` TEXT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -163,7 +214,7 @@ CREATE TABLE `attendances` (
   FOREIGN KEY (`schedule_id`) REFERENCES `schedules`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 9. Journals (Teaching Log) Table
+-- 11. Journals (Teaching Log & Evaluasi Fleksibel Sesi) Table
 CREATE TABLE `journals` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `attendance_id` INT NOT NULL UNIQUE,
@@ -171,12 +222,14 @@ CREATE TABLE `journals` (
   `tutor_id` INT NOT NULL,
   `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
   `unit_name` VARCHAR(150) NOT NULL DEFAULT 'Unit Riscon Rancaekek',
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
   `session_number` INT NOT NULL DEFAULT 1,
   `package_total` INT NOT NULL DEFAULT 8,
   `date` DATE NOT NULL,
   `topic` VARCHAR(255) NOT NULL,
   `targets_achieved` TEXT NOT NULL,
   `score` DECIMAL(5, 2) NULL,
+  `eval_data_json` JSON NULL,
   `fluency_rating` VARCHAR(50) NULL,
   `makhraj_rating` VARCHAR(50) NULL,
   `tajwid_rating` VARCHAR(50) NULL,
@@ -193,11 +246,13 @@ CREATE TABLE `journals` (
   FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 10. Reschedule & Izin Requests Table
+-- 12. Reschedule & Izin Requests Table
 CREATE TABLE `reschedule_requests` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `student_id` INT NOT NULL,
-  `program_name` VARCHAR(150) NOT NULL,
+  `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
+  `unit_name` VARCHAR(150) NOT NULL DEFAULT 'Unit Riscon Rancaekek',
+  `class_type` VARCHAR(100) NOT NULL DEFAULT 'Semi Privat',
   `schedule_id` INT NULL,
   `original_date` DATE NOT NULL,
   `reason` ENUM('izin', 'sakit', 'acara_keluarga', 'lainnya') NOT NULL DEFAULT 'izin',
@@ -205,220 +260,189 @@ CREATE TABLE `reschedule_requests` (
   `requested_new_date` DATE NULL,
   `requested_new_time` VARCHAR(50) NULL,
   `status` ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  `session_decision` ENUM('valid', 'forfeited') NOT NULL DEFAULT 'valid',
   `admin_notes` TEXT NULL,
+  `approved_by` INT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`schedule_id`) REFERENCES `schedules`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 11. Worksheets Table
-CREATE TABLE `worksheets` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `title` VARCHAR(255) NOT NULL,
-  `description` TEXT NULL,
-  `subject` VARCHAR(100) NOT NULL,
-  `grade_level` VARCHAR(50) NOT NULL,
-  `file_url` VARCHAR(255) NOT NULL,
-  `file_type` VARCHAR(50) DEFAULT 'pdf',
-  `uploaded_by_id` INT NULL,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (`uploaded_by_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 12. Worksheet Submissions Table
-CREATE TABLE `worksheet_submissions` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `worksheet_id` INT NOT NULL,
-  `student_id` INT NOT NULL,
-  `file_url` VARCHAR(255) NOT NULL,
-  `score` DECIMAL(5, 2) NULL,
-  `feedback` TEXT NULL,
-  `status` ENUM('submitted', 'reviewed') NOT NULL DEFAULT 'submitted',
-  `submitted_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `reviewed_at` TIMESTAMP NULL,
-  FOREIGN KEY (`worksheet_id`) REFERENCES `worksheets`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 13. Invoices Table (Tagihan SPP Bulanan Siswa)
+-- 13. Invoices Table (Tagihan SPP Bulanan Siswa Multi-Program)
 CREATE TABLE `invoices` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `invoice_number` VARCHAR(50) NOT NULL UNIQUE,
   `student_id` INT NOT NULL,
   `period_month` VARCHAR(50) NOT NULL DEFAULT 'Agustus 2026',
-  `package_name` VARCHAR(150) NOT NULL DEFAULT 'Paket 8 Pertemuan/Bulan',
-  `milestone_name` VARCHAR(100) NOT NULL DEFAULT 'SPP Agustus 2026',
-  `sessions_count` INT NOT NULL DEFAULT 8,
   `amount` DECIMAL(12, 2) NOT NULL,
+  `package_sessions` INT NOT NULL DEFAULT 8,
+  `sessions_completed` INT NOT NULL DEFAULT 0,
+  `status` ENUM('unpaid', 'paid', 'overdue') NOT NULL DEFAULT 'unpaid',
   `due_date` DATE NOT NULL,
-  `status` ENUM('unpaid', 'pending_verification', 'paid', 'cancelled') NOT NULL DEFAULT 'unpaid',
-  `payment_proof_url` VARCHAR(255) NULL,
   `paid_at` TIMESTAMP NULL,
+  `payment_method` VARCHAR(50) NULL,
+  `proof_url` VARCHAR(255) NULL,
   `notes` TEXT NULL,
+  `items_json` JSON NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 14. Invoice Items Table (Rincian per Program)
-CREATE TABLE `invoice_items` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `invoice_id` INT NOT NULL,
-  `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
-  `attendance_id` INT NULL,
-  `session_date` DATE NULL,
-  `description` VARCHAR(255) NOT NULL,
-  `amount` DECIMAL(12, 2) NOT NULL,
-  FOREIGN KEY (`invoice_id`) REFERENCES `invoices`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`attendance_id`) REFERENCES `attendances`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 15. Tutor Honor Recaps Table
-CREATE TABLE `tutor_honor_recaps` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `tutor_id` INT NOT NULL,
-  `period_month` VARCHAR(20) NOT NULL,
-  `total_sessions` INT NOT NULL DEFAULT 0,
-  `total_hours` DECIMAL(6, 2) NOT NULL DEFAULT 0.00,
-  `rate_per_session` DECIMAL(12, 2) NOT NULL,
-  `total_honor` DECIMAL(12, 2) NOT NULL,
-  `status` ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
-  `paid_at` TIMESTAMP NULL,
-  `notes` TEXT NULL,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 16. AI Reports Table (Laporan Perkembangan Resmi Siswa)
+-- 14. AI Reports Table (Laporan Perkembangan AI Berkala)
 CREATE TABLE `ai_reports` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `student_id` INT NOT NULL,
-  `tutor_id` INT NULL,
+  `tutor_id` INT NOT NULL,
   `program_name` VARCHAR(150) NOT NULL DEFAULT 'Cermat Matematika',
-  `report_type` ENUM('daily', 'weekly', 'monthly', 'report_card') NOT NULL DEFAULT 'monthly',
-  `period` VARCHAR(100) NOT NULL DEFAULT 'Agustus 2026',
+  `report_type` ENUM('monthly', 'mid_package', 'final_package', 'comprehensive') NOT NULL DEFAULT 'mid_package',
+  `period` VARCHAR(50) NOT NULL, -- e.g. "Agustus 2026 - Periode 1"
+  `milestone_session` INT NOT NULL DEFAULT 4,
   `title` VARCHAR(255) NOT NULL,
   `summary` TEXT NOT NULL,
   `strengths` TEXT NOT NULL,
   `areas_for_improvement` TEXT NOT NULL,
   `recommendations` TEXT NOT NULL,
-  `ai_generated_notes` TEXT NOT NULL,
-  `status` ENUM('draft', 'published') NOT NULL DEFAULT 'published',
+  `ai_generated_notes` TEXT NULL,
+  `parent_feedback` TEXT NULL,
+  `status` ENUM('draft', 'tutor_reviewed', 'admin_approved', 'sent_to_parent') NOT NULL DEFAULT 'tutor_reviewed',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`student_id`) REFERENCES `students`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ========================================================
--- SAMPLE DATA INSERTION (Production-ready default data)
--- ========================================================
+-- 15. Tutor Honor Recaps Table (Rekap Sesi Terlaksana & Transport Home Visit)
+CREATE TABLE `tutor_honor_recaps` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tutor_id` INT NOT NULL,
+  `period_month` VARCHAR(20) NOT NULL, -- e.g. "2026-08"
+  `total_sessions` INT NOT NULL DEFAULT 0,
+  `home_visit_sessions` INT NOT NULL DEFAULT 0,
+  `total_hours` DECIMAL(6, 2) NOT NULL DEFAULT 0.00,
+  `rate_per_session` DECIMAL(12, 2) NOT NULL DEFAULT 75000.00,
+  `total_transport_fee` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `total_teaching_honor` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `total_honor` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+  `status` ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+  `paid_at` TIMESTAMP NULL,
+  `notes` TEXT NULL,
+  `breakdown_json` JSON NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`tutor_id`) REFERENCES `tutors`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Insert Units
-INSERT INTO `units` (`id`, `name`, `address`, `phone`) VALUES
-(1, 'Unit Riscon Rancaekek', 'Perumahan Grand Riscon Rancaekek Blok B2 No. 12, Bandung', '081212788313'),
-(2, 'Unit Panorama Jatinangor', 'Perumahan Panorama Jatinangor Blok C No. 5, Sumedang', '081298765432'),
-(3, 'Unit Rumah Belajar Pusat', 'Jl. Raya Rancaekek - Jatinangor No. 45, Kab. Bandung', '081212788313');
+-- ==============================================================================
+-- INITIAL SEED DATA
+-- ==============================================================================
 
--- Insert Master Programs
-INSERT INTO `programs` (`id`, `name`, `category`, `default_fee`, `description`) VALUES
-(1, 'Cermat Matematika', 'akademik', 350000.00, 'Bimbingan konsep matematika dasar hingga pemecahan soal berfikir tingkat tinggi (HOTS).'),
-(2, 'English BEC', 'bahasa', 400000.00, 'Basic English Course, vocabulary building, active speaking, & grammar foundation.'),
-(3, 'Mengaji & Tahfidz', 'quran', 300000.00, 'Tahsin Al-Qur\'an, kaidah makharijul huruf, tajwid, dan setoran hafalan juz 30.'),
-(4, 'Pracalis Calistung', 'pracalis', 280000.00, 'Membaca, menulis, dan berhitung metode fonik menyenangkan untuk usia dini (TK/PAUD).');
+-- Settings
+INSERT INTO `settings` (`key_name`, `value`, `description`, `category`) VALUES
+('spp_due_date_day', '10', 'Tanggal jatuh tempo tagihan SPP bulanan (setiap tanggal X)', 'spp'),
+('spp_invoice_prefix', 'INV/RBL/', 'Prefix nomor invoice tagihan SPP', 'spp'),
+('default_home_visit_transport', '25000', 'Tarif transport standar untuk Privat Home Visit per sesi (Rp)', 'honor'),
+('admin_whatsapp', '6281234567890', 'Nomor WhatsApp resmi admin untuk reminder dan informasi', 'contact'),
+('bank_account_info', 'BCA 1234567890 a/n Rumah Belajar Rumbala', 'Rekening resmi pembayaran SPP & Tagihan', 'payment'),
+('leave_policy_days_prior', '1', 'Batas minimal pengajuan izin/reschedule (hari sebelum sesi)', 'reschedule'),
+('forfeited_unexcused_sessions', 'true', 'Ketentuan sesi hangus jika alfa / tidak ada kabar', 'reschedule');
 
--- Insert Default Users (Password is 'password123' bcrypt hashed)
+-- Units
+INSERT INTO `units` (`id`, `name`, `address`, `phone`, `status`) VALUES
+(1, 'Unit Riscon Rancaekek', 'Perumahan Riscon Grand Dago Blok A1 No. 5, Rancaekek, Kab. Bandung', '081234567801', 'active'),
+(2, 'Unit Panorama Jatinangor', 'Perum Panorama Jatinangor Blok B3 No. 12, Jatinangor, Sumedang', '081234567802', 'active'),
+(3, 'Rumah Belajar Pusat', 'Komplek Edukasi Rumbala No. 88, Bandung Timur', '081234567800', 'active');
+
+-- Programs
+INSERT INTO `programs` (`id`, `name`, `code`, `category`, `evaluation_type`, `default_fee`, `default_fee_per_session`, `default_tutor_fee`, `description`, `status`) VALUES
+(1, 'Pracalis Calistung', 'PRACALIS', 'pracalis', 'general', 300000.00, 37500.00, 70000.00, 'Program dasar membaca, menulis, dan berhitung untuk usia dini.', 'active'),
+(2, 'Prisma Kalkulator Tangan', 'PRISMA', 'akademik', 'prisma', 350000.00, 43750.00, 75000.00, 'Metode berhitung cepat dengan kalkulator tangan & ketelitian tinggi.', 'active'),
+(3, 'Cermat Matematika', 'CR-MTK', 'akademik', 'math', 350000.00, 43750.00, 80000.00, 'Bimbingan logika matematika, konsep, ketelitian, dan problem solving HOTS.', 'active'),
+(4, 'Abama Baca Cerdas', 'ABAMA', 'bahasa', 'general', 300000.00, 37500.00, 70000.00, 'Metode cepat dan menyenangkan belajar membaca tanpa mengeja.', 'active'),
+(5, 'English BEC', 'ENG-BEC', 'bahasa', 'english', 375000.00, 46875.00, 85000.00, 'English Basic & Everyday Conversation, Vocabulary, Grammar, Speaking.', 'active'),
+(6, 'Mengaji & Tahsin', 'MENGAJI', 'quran', 'mengaji', 300000.00, 37500.00, 75000.00, 'Bimbingan tartil, makhraj, panjang pendek, dan hukum tajwid.', 'active'),
+(7, 'Tahfidz Al-Qur\'an', 'TAHFIDZ', 'quran', 'tahfidz', 350000.00, 43750.00, 80000.00, 'Program hafalan mutqin, murojaah harian, dan setoran hafalan surah.', 'active'),
+(8, 'Mapel Arab', 'ARAB', 'bahasa', 'general', 325000.00, 40625.00, 75000.00, 'Penguasaan kosakata dasar dan percakapan bahasa Arab.', 'active');
+
+-- Users
 INSERT INTO `users` (`id`, `name`, `email`, `username`, `password`, `role`, `phone`) VALUES
-(1, 'Administrator Rumbala', 'admin@rumbala.com', 'admin', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'admin', '081212788313'),
+(1, 'Admin Rumbala Pusat', 'admin@rumbala.com', 'admin.rumbala', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'admin', '081234567890'),
 (2, 'Sarah Azzahra, S.Pd', 'sarah.tutor@rumbala.com', 'tutor.sarah', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'tutor', '081234567890'),
 (3, 'Budi Santoso, M.Si', 'budi.tutor@rumbala.com', 'tutor.budi', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'tutor', '081298765432'),
-(4, 'Ibu Ratna Sari (Wali Keenan & Aisyah)', 'ratna.wali@gmail.com', 'wali.keenan', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'parent', '081388776655'),
-(5, 'Pak Hendra (Wali Alicia)', 'hendra.wali@gmail.com', 'wali.alicia', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'parent', '081577665544');
+(4, 'Nabila Maharani, S.Hum', 'nabila.tutor@rumbala.com', 'tutor.nabila', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'tutor', '081377889900'),
+(5, 'Bunda Rina (Ortu Keenan)', 'rina.parent@rumbala.com', 'ortu.rina', '$2b$10$wE6vYwP9hA7k0lqN9F1Rke6qX5tC3yK7I4g0w0a9B5mN4rQj6fV3W', 'parent', '081234567890');
 
--- Insert Tutors
+-- Tutors
 INSERT INTO `tutors` (`id`, `user_id`, `name`, `email`, `phone`, `subjects`, `units_teaching`, `class_types`, `fee_per_session`, `status`, `bio`) VALUES
-(1, 2, 'Sarah Azzahra, S.Pd', 'sarah.tutor@rumbala.com', '081234567890', 'Cermat Matematika, Mengaji & Tahfidz', 'Unit Riscon Rancaekek, Unit Panorama Jatinangor', 'Privat, Semi Privat', 80000.00, 'active', 'Pengajar Matematika & Tahsin berpengalaman 5 tahun dengan metode kontekstual dan fun learning.'),
-(2, 3, 'Budi Santoso, M.Si', 'budi.tutor@rumbala.com', '081298765432', 'English BEC, Fisika & Sains', 'Unit Riscon Rancaekek', 'Privat, Online', 95000.00, 'active', 'Spesialis English Speaking dan Cambridge Curriculum for Kids.');
+(1, 2, 'Sarah Azzahra, S.Pd', 'sarah.tutor@rumbala.com', '081234567890', 'Cermat Matematika, Mengaji & Tahsin', 'Unit Riscon Rancaekek, Unit Panorama Jatinangor', 'Semi Privat, Privat di Tempat Les, Privat Home Visit', 80000.00, 'active', 'Pengajar Matematika & Tahsin berpengalaman 5 tahun dengan metode kontekstual dan fun learning.'),
+(2, 3, 'Budi Santoso, M.Si', 'budi.tutor@rumbala.com', '081298765432', 'English BEC, Prisma Kalkulator Tangan', 'Unit Panorama Jatinangor, Unit Riscon Rancaekek', 'Privat di Tempat Les, Online Privat, Privat Home Visit', 95000.00, 'active', 'Spesialis English Speaking dan Kalkulator Tangan Cepat.'),
+(3, 4, 'Nabila Maharani, S.Hum', 'nabila.tutor@rumbala.com', '081377889900', 'English BEC, Pracalis Calistung', 'Unit Panorama Jatinangor', 'Privat di Tempat Les, Semi Privat', 85000.00, 'active', 'Edukator bahasa inggris anak-anak dengan pendekatan interaktif gamified.');
 
--- Insert Students (Note: 1 Parent Ibu Ratna id=4 has 2 children: Keenan and Aisyah)
-INSERT INTO `students` (`id`, `user_id`, `name`, `nickname`, `birth_date`, `parent_name`, `parent_phone`, `parent_email`, `address`, `class_grade`, `school`, `subjects`, `tuition_fee_per_session`, `status`, `total_sessions_completed`, `unbilled_sessions_count`) VALUES
-(1, 4, 'Keenan Alvaro', 'Keenan', '2015-04-12', 'Ibu Ratna Sari', '081388776655', 'ratna.wali@gmail.com', 'Perumahan Grand Riscon Blok C3 No 8', 'Kelas 5 SD', 'SDIT Al-Azhar Rancaekek', 'Cermat Matematika, English BEC, Mengaji & Tahfidz', 100000.00, 'active', 11, 0),
-(2, 4, 'Aisyah Alvaro', 'Aisyah', '2019-09-20', 'Ibu Ratna Sari', '081388776655', 'ratna.wali@gmail.com', 'Perumahan Grand Riscon Blok C3 No 8', 'TK B', 'TK Islam Terpadu Annur', 'Pracalis Calistung, Mengaji & Tahfidz', 90000.00, 'active', 6, 0),
-(3, 5, 'Alicia Putri', 'Alicia', '2012-08-15', 'Pak Hendra Wijaya', '081577665544', 'hendra.wali@gmail.com', 'Panorama Jatinangor Kav 12', 'Kelas 8 SMP', 'SMPN 1 Jatinangor', 'English BEC, Cermat Matematika', 120000.00, 'active', 8, 0);
+-- Tutor Rates
+INSERT INTO `tutor_rates` (`id`, `tutor_id`, `program_name`, `class_type`, `duration_minutes`, `rate_per_session`, `transport_fee`, `notes`) VALUES
+(1, 1, 'Cermat Matematika', 'Semi Privat', 90, 80000.00, 0.00, 'Standar Semi Privat Unit'),
+(2, 1, 'Cermat Matematika', 'Privat di Tempat Les', 90, 90000.00, 0.00, 'Privat di Unit Riscon/Panorama'),
+(3, 1, 'Cermat Matematika', 'Privat Home Visit', 90, 95000.00, 25000.00, 'Mengajar ke rumah + Transport'),
+(4, 1, 'Mengaji & Tahsin', 'Semi Privat', 60, 75000.00, 0.00, 'Semi Privat Tahsin'),
+(5, 1, 'Mengaji & Tahsin', 'Privat Home Visit', 60, 85000.00, 25000.00, 'Home Visit Tahsin + Transport'),
+(6, 2, 'English BEC', 'Privat di Tempat Les', 90, 95000.00, 0.00, 'Privat Speaking English'),
+(7, 2, 'English BEC', 'Online Privat', 90, 90000.00, 0.00, 'Online via Zoom'),
+(8, 2, 'English BEC', 'Privat Home Visit', 90, 100000.00, 30000.00, 'Home Visit English + Transport'),
+(9, 3, 'English BEC', 'Privat di Tempat Les', 90, 85000.00, 0.00, 'Privat Unit Panorama');
 
--- Insert Student Programs (Multi-Program per Siswa)
-INSERT INTO `student_programs` (`id`, `student_id`, `program_name`, `unit_name`, `tutor_id`, `package_sessions`, `monthly_fee`, `completed_sessions_month`, `schedule_info`, `status`) VALUES
--- Keenan: 3 programs
-(1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 1, 8, 350000.00, 4, 'Senin & Kamis 15.30–17.00', 'active'),
-(2, 1, 'English BEC', 'Unit Riscon Rancaekek', 2, 4, 300000.00, 2, 'Rabu 15.30–17.00', 'active'),
-(3, 1, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', 1, 8, 300000.00, 5, 'Selasa & Jumat 16.00–17.30', 'active'),
--- Aisyah: 2 programs
-(4, 2, 'Pracalis Calistung', 'Unit Riscon Rancaekek', 1, 8, 280000.00, 4, 'Senin & Rabu 14.00–15.00', 'active'),
-(5, 2, 'Mengaji & Tahfidz', 'Unit Riscon Rancaekek', 1, 4, 200000.00, 2, 'Jumat 14.00–15.00', 'active'),
--- Alicia: 1 program
-(6, 3, 'English BEC', 'Unit Panorama Jatinangor', 2, 8, 400000.00, 8, 'Selasa & Kamis 16.00–17.30', 'active');
+-- Students
+INSERT INTO `students` (`id`, `user_id`, `name`, `nickname`, `birth_date`, `parent_name`, `parent_phone`, `parent_email`, `address`, `class_grade`, `school`, `subjects`, `tuition_fee_per_session`, `status`, `notes`, `total_sessions_completed`, `unbilled_sessions_count`) VALUES
+(1, 5, 'Keenan Alvaro Pratama', 'Keenan', '2016-04-12', 'Bunda Rina & Ayah Dimas', '081234567890', 'rina.parent@rumbala.com', 'Cluster Grand Riscon Dago Blok C2 No. 8, Rancaekek', 'Kelas 5 SD', 'SDIT Al-Madani Rancaekek', 'Cermat Matematika, English BEC', 100000.00, 'active', 'Siswa aktif, cepat memahami materi logika dan visual.', 6, 0),
+(2, 5, 'Nafisa Putri Azzahra', 'Nafisa', '2019-08-20', 'Bunda Rina & Ayah Dimas', '081234567890', 'rina.parent@rumbala.com', 'Cluster Grand Riscon Dago Blok C2 No. 8, Rancaekek', 'Kelas 2 SD', 'SDIT Al-Madani Rancaekek', 'Mengaji & Tahsin, Pracalis Calistung', 85000.00, 'active', 'Anak kedua Bunda Rina, bimbingan tahsin juz 30 & calistung.', 4, 0);
 
--- Insert Schedules
-INSERT INTO `schedules` (`id`, `student_id`, `tutor_id`, `program_name`, `unit_name`, `day_of_week`, `start_time`, `end_time`, `subject`, `location_type`, `status`, `notes`) VALUES
-(1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Senin', '15:30:00', '17:00:00', 'Matematika SD Kelas 5', 'offline', 'active', 'Ruang Belajar 1'),
-(2, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Kamis', '15:30:00', '17:00:00', 'Matematika SD Kelas 5', 'offline', 'active', 'Ruang Belajar 1'),
-(3, 1, 2, 'English BEC', 'Unit Riscon Rancaekek', 'Rabu', '15:30:00', '17:00:00', 'English Speaking & Grammar', 'offline', 'active', 'Lab Bahasa'),
-(4, 1, 1, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', 'Selasa', '16:00:00', '17:30:00', 'Tahsin & Tahfidz Juz 30', 'offline', 'active', 'Ruang Mengaji'),
-(5, 1, 1, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', 'Jumat', '16:00:00', '17:30:00', 'Tahsin & Tahfidz Juz 30', 'offline', 'active', 'Ruang Mengaji'),
-(6, 2, 1, 'Pracalis Calistung', 'Unit Riscon Rancaekek', 'Senin', '14:00:00', '15:00:00', 'Membaca & Berhitung Ceria', 'offline', 'active', 'Ruang Kids'),
-(7, 2, 1, 'Mengaji & Tahfidz', 'Unit Riscon Rancaekek', 'Jumat', '14:00:00', '15:00:00', 'Iqro & Hafalan Doa', 'offline', 'active', 'Ruang Kids');
+-- Student Programs (Multi Program per Siswa)
+INSERT INTO `student_programs` (`id`, `student_id`, `program_name`, `unit_name`, `class_type`, `tutor_id`, `package_sessions`, `monthly_fee`, `completed_sessions_month`, `schedule_info`, `initial_level`, `strengths`, `areas_for_improvement`, `learning_targets`, `special_needs`, `important_notes`, `status`) VALUES
+(1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 1, 8, 350000.00, 6, 'Senin & Rabu 15:30 - 17:00', 'Pemahaman Pecahan Dasar (Grade 5)', 'Logika matematika cepat tangkap, antusias dengan soal tantangan', 'Perlu pembiasaan menuliskan langkah runtut pada soal cerita HOTS', 'Menguasai KPK, FPB, Pecahan Campuran, dan Desimal', NULL, 'Lebih termotivasi dengan metode gamifikasi kuis interaktif', 'active'),
+(2, 1, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 3, 4, 380000.00, 3, 'Jumat 16:00 - 17:30', 'Basic Vocabulary & Daily Phonics', 'Pronunciation bagus dan percaya diri saat speaking', 'Grammar past tense dan vocabulary variatif', 'Mampu presentasi singkat 2 menit dalam Bahasa Inggris', NULL, 'Gunakan flashcards dan storytelling', 'active'),
+(3, 2, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 1, 8, 400000.00, 4, 'Selasa & Kamis 16:00 - 17:00', 'Juz 30 (Surah An-Naba & Al-Mulk)', 'Makhraj huruf halqi fasih, intonasi tartil merdu', 'Konsistensi murojaah mandiri harian di rumah', 'Hafal Mutqin Surah Al-Mulk ayat 1-30', NULL, 'Fokus bimbingan tahsin makharijul huruf & mad', 'active');
 
--- Insert Attendances
-INSERT INTO `attendances` (`id`, `student_id`, `tutor_id`, `schedule_id`, `program_name`, `unit_name`, `date`, `start_time`, `end_time`, `status`, `session_number`, `package_total`, `parent_confirmed`, `billed`, `notes`) VALUES
-(1, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', '2026-08-03', '15:30:00', '17:00:00', 'hadir', 1, 8, 1, 1, 'Pertemuan 1/8 berjalan lancar'),
-(2, 1, 1, 2, 'Cermat Matematika', 'Unit Riscon Rancaekek', '2026-08-06', '15:30:00', '17:00:00', 'hadir', 2, 8, 1, 1, 'Pertemuan 2/8 sangat aktif'),
-(3, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', '2026-08-10', '15:30:00', '17:00:00', 'hadir', 3, 8, 1, 1, 'Pertemuan 3/8 tuntas konsep'),
-(4, 1, 1, 2, 'Cermat Matematika', 'Unit Riscon Rancaekek', '2026-08-13', '15:30:00', '17:00:00', 'hadir', 4, 8, 1, 1, 'Pertemuan 4/8 - Progress 4/8 Tercapai'),
-(5, 1, 2, 3, 'English BEC', 'Unit Riscon Rancaekek', '2026-08-05', '15:30:00', '17:00:00', 'hadir', 1, 4, 1, 1, 'Introduction to Daily Conversations'),
-(6, 1, 2, 3, 'English BEC', 'Unit Riscon Rancaekek', '2026-08-12', '15:30:00', '17:00:00', 'hadir', 2, 4, 1, 1, 'Vocabulary & Roleplay'),
-(7, 1, 1, 4, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', '2026-08-04', '16:00:00', '17:30:00', 'hadir', 1, 8, 1, 1, 'Tahsin Surah An-Naba'),
-(8, 1, 1, 5, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', '2026-08-07', '16:00:00', '17:30:00', 'hadir', 2, 8, 1, 1, 'Hafalan Al-Mulk ayat 1-5'),
-(9, 1, 1, 4, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', '2026-08-11', '16:00:00', '17:30:00', 'hadir', 3, 8, 1, 1, 'Tahsin Makhraj & Mad'),
-(10, 1, 1, 5, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', '2026-08-14', '16:00:00', '17:30:00', 'hadir', 4, 8, 1, 1, 'Murojaah Juz 30'),
-(11, 1, 1, 4, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', '2026-08-18', '16:00:00', '17:30:00', 'hadir', 5, 8, 1, 1, 'Setoran Al-Mulk ayat 6-10');
+-- Schedules
+INSERT INTO `schedules` (`id`, `student_id`, `tutor_id`, `program_name`, `unit_name`, `class_type`, `day_of_week`, `start_time`, `end_time`, `duration_minutes`, `subject`, `location_type`, `is_home_visit`, `home_address`, `status`, `notes`) VALUES
+(1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 'Senin', '15:30:00', '17:00:00', 90, 'Matematika SD Grade 5', 'offline', 0, NULL, 'active', 'Sesi reguler semi privat di unit'),
+(2, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 'Rabu', '15:30:00', '17:00:00', 90, 'Matematika SD Grade 5', 'offline', 0, NULL, 'active', 'Sesi reguler semi privat di unit'),
+(3, 1, 3, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 'Jumat', '16:00:00', '17:30:00', 90, 'English BEC Conversation', 'offline', 0, NULL, 'active', 'Privat intensif speaking'),
+(4, 2, 1, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 'Selasa', '16:00:00', '17:00:00', 60, 'Tahsin & Tahfidz Quran', 'offline', 1, 'Cluster Grand Riscon Dago Blok C2 No. 8', 'active', 'Tutor datang ke rumah siswa (+Transport)'),
+(5, 2, 1, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 'Kamis', '16:00:00', '17:00:00', 60, 'Tahsin & Tahfidz Quran', 'offline', 1, 'Cluster Grand Riscon Dago Blok C2 No. 8', 'active', 'Tutor datang ke rumah siswa (+Transport)');
 
--- Insert Journals
-INSERT INTO `journals` (`id`, `attendance_id`, `student_id`, `tutor_id`, `program_name`, `unit_name`, `session_number`, `package_total`, `date`, `topic`, `targets_achieved`, `score`, `fluency_rating`, `makhraj_rating`, `tajwid_rating`, `memorization_surah`, `murojaah_status`, `progress_notes`, `homework`, `next_target`) VALUES
-(1, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 1, 8, '2026-08-03', 'Operasi Pecahan Campuran', 'Mampu menjumlahkan pecahan berbeda penyebut dengan metode KPK.', 88.00, NULL, NULL, NULL, NULL, NULL, 'Keenan sangat cepat memahami konsep KPK penyebut pecahan.', 'Buku Rumbala hal 12 no 1-5', 'Pengurangan dan perkalian pecahan'),
-(2, 2, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 2, 8, '2026-08-06', 'Perkalian dan Pembagian Pecahan', 'Menyelesaikan 10 soal cerita pecahan matematika dasar.', 92.00, NULL, NULL, NULL, NULL, NULL, 'Fokus belajar sangat prima, pengerjaan rapih.', 'Latihan mandiri modul Bab 2', 'Desimal dan Persentase'),
-(3, 3, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 3, 8, '2026-08-10', 'Konversi Pecahan ke Desimal & Persen', 'Memahami trik cepat pembagian bersusun (porogapit).', 90.00, NULL, NULL, NULL, NULL, NULL, 'Bisa menyelesaikan soal latihan tanpa bantuan tutor.', 'Kerjakan kuis halaman 18', 'Soal HOTS cerita persentase diskon'),
-(4, 4, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 4, 8, '2026-08-13', 'KPK & FPB Soal Cerita', 'Mampu membedakan tipe soal FPB (pembagian barang) dan KPK (jadwal bersama).', 95.00, NULL, NULL, NULL, NULL, NULL, 'Sangat percaya diri menjawab soal HOTS olimpiade tingkat dasar.', 'Review materi bab 1-3', 'Pengukuran Debit dan Kecepatan'),
-(5, 5, 1, 2, 'English BEC', 'Unit Riscon Rancaekek', 1, 4, '2026-08-05', 'Self Introduction & Hobbies', 'Mampu berbicara 3 menit memperkenalkan diri dan hobi dalam Bahasa Inggris.', 85.00, NULL, NULL, NULL, NULL, NULL, 'Pronunciation jelas, perlu sedikit percaya diri saat menjawab spontan.', 'Rekam audio perkenalan 1 menit', 'Simple Present Tense & Daily Routine'),
-(6, 6, 1, 2, 'English BEC', 'Unit Riscon Rancaekek', 2, 4, '2026-08-12', 'Daily Routine & Telling Time', 'Menguasai 15 kosakata aktivitas harian dan penggunaan waktu (o\'clock, half past).', 90.00, NULL, NULL, NULL, NULL, NULL, 'Active participation, sangat antusias bermain flashcard.', 'Worksheet English Unit 2', 'Family Members & Describing People'),
-(7, 7, 1, 1, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', 1, 8, '2026-08-04', 'Tahsin Makharijul Huruf Halqi & Lisani', 'Membedakan pengucapan huruf Ha (ح) dan Kha (خ) serta Ain (ع).', NULL, 'Baik', 'Sesuai Kaidah', 'Berkembang', 'Surah An-Naba ayat 1-10', 'Lancar', 'Makhraj huruf tenggorokan sudah semakin tepat.', 'Murojaah di rumah 10 menit', 'Tajwid Nun Mati & Tanwin (Idzhar)'),
-(8, 8, 1, 1, 'Mengaji & Tahfidz', 'Unit Panorama Jatinangor', 2, 8, '2026-08-07', 'Setoran Hafalan Surah Al-Mulk', 'Menghafal lancar Surah Al-Mulk ayat 1-5 dengan tajwid tartil.', NULL, 'Sangat Lancar', 'Sesuai Kaidah', 'Menguasai', 'Surah Al-Mulk ayat 1-5', 'Lancar', 'Hafalan sangat kuat, intonasi tartil merdu.', 'Murojaah ayat 1-5 persiapan sambung ayat', 'Al-Mulk ayat 6-10');
+-- Attendances
+INSERT INTO `attendances` (`id`, `student_id`, `tutor_id`, `schedule_id`, `program_name`, `unit_name`, `class_type`, `is_home_visit`, `date`, `start_time`, `end_time`, `duration_minutes`, `status`, `session_number`, `package_total`, `parent_confirmed`, `billed`, `tutor_session_fee`, `tutor_transport_fee`, `tutor_total_honor`, `notes`) VALUES
+(1, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-03', '15:30:00', '17:00:00', 90, 'hadir', 1, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 1 Berjalan lancar.'),
+(2, 1, 1, 2, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-05', '15:30:00', '17:00:00', 90, 'hadir', 2, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 2 KPK & FPB.'),
+(3, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-10', '15:30:00', '17:00:00', 90, 'hadir', 3, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 3 Pecahan Desimal.'),
+(4, 1, 1, 2, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-12', '15:30:00', '17:00:00', 90, 'hadir', 4, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 4 Evaluasi Mid-Package.'),
+(5, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-17', '15:30:00', '17:00:00', 90, 'hadir', 5, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 5 Operasi Hitung Campuran.'),
+(6, 1, 1, 2, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 0, '2026-08-19', '15:30:00', '17:00:00', 90, 'hadir', 6, 8, 1, 1, 80000.00, 0.00, 80000.00, 'Sesi 6 Soal Cerita HOTS.'),
+(7, 1, 3, 3, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 0, '2026-08-07', '16:00:00', '17:30:00', 90, 'hadir', 1, 4, 1, 1, 85000.00, 0.00, 85000.00, 'English Session 1 Speaking.'),
+(8, 1, 3, 3, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 0, '2026-08-14', '16:00:00', '17:30:00', 90, 'hadir', 2, 4, 1, 1, 85000.00, 0.00, 85000.00, 'English Session 2 Vocabulary.'),
+(9, 1, 3, 3, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 0, '2026-08-21', '16:00:00', '17:30:00', 90, 'hadir', 3, 4, 1, 1, 85000.00, 0.00, 85000.00, 'English Session 3 Storytelling.'),
+(10, 2, 1, 4, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 1, '2026-08-04', '16:00:00', '17:00:00', 60, 'hadir', 1, 8, 1, 1, 85000.00, 25000.00, 110000.00, 'Home Visit Tahsin Session 1.'),
+(11, 2, 1, 5, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 1, '2026-08-06', '16:00:00', '17:00:00', 60, 'hadir', 2, 8, 1, 1, 85000.00, 25000.00, 110000.00, 'Home Visit Tahsin Session 2.');
 
--- Insert Reschedule Requests
-INSERT INTO `reschedule_requests` (`id`, `student_id`, `program_name`, `schedule_id`, `original_date`, `reason`, `reason_details`, `requested_new_date`, `requested_new_time`, `status`, `admin_notes`) VALUES
-(1, 1, 'Cermat Matematika', 1, '2026-08-24', 'acara_keluarga', 'Menghadiri acara keluarga di luar kota pada hari Senin sore.', '2026-08-27', '15:30 - 17:00 WIB', 'approved', 'Disetujui Admin. Jadwal pengganti pada Kamis 27 Agustus 2026.');
+-- Journals
+INSERT INTO `journals` (`id`, `attendance_id`, `student_id`, `tutor_id`, `program_name`, `unit_name`, `class_type`, `session_number`, `package_total`, `date`, `topic`, `targets_achieved`, `score`, `eval_data_json`, `fluency_rating`, `makhraj_rating`, `tajwid_rating`, `memorization_surah`, `murojaah_status`, `progress_notes`, `homework`, `next_target`) VALUES
+(1, 1, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 1, 8, '2026-08-03', 'Review Bilangan Bulat & KPK', 'Memahami konsep faktorisasi prima dengan pohon faktor.', 88.00, '{"concept_understanding": 90, "accuracy": 85, "problem_solving": 88}', NULL, NULL, NULL, NULL, NULL, 'Fokus belajar baik, antusias menjawab soal cepat.', 'Latihan mandiri no 1-5 di buku fisik', 'Konsep FPB dan soal cerita'),
+(2, 2, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 2, 8, '2026-08-05', 'FPB & Aplikasi Soal Cerita', 'Mampu membedakan kata kunci soal cerita KPK vs FPB.', 92.00, '{"concept_understanding": 95, "accuracy": 90, "problem_solving": 90}', NULL, NULL, NULL, NULL, NULL, 'Penyelesaian soal cerita sangat runtut dan teliti.', 'Kuis halaman 12', 'Pecahan biasa dan desimal'),
+(3, 3, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 3, 8, '2026-08-10', 'Konversi Pecahan ke Desimal & Persen', 'Memahami trik cepat pembagian bersusun (porogapit).', 90.00, '{"concept_understanding": 90, "accuracy": 88, "problem_solving": 92}', NULL, NULL, NULL, NULL, NULL, 'Bisa menyelesaikan soal latihan tanpa bantuan tutor.', 'Kerjakan kuis halaman 18', 'Soal HOTS cerita persentase diskon'),
+(4, 4, 1, 1, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 4, 8, '2026-08-12', 'Evaluasi Mid-Package & Pecahan Campuran', 'Tuntas 15 soal evaluasi dengan skor memuaskan.', 94.00, '{"concept_understanding": 95, "accuracy": 92, "problem_solving": 95}', NULL, NULL, NULL, NULL, NULL, 'Capaian pertemuan 4 dari 8 sangat baik, siap lanjut materi lanjut.', 'Review materi bab 1', 'Perkalian dan pembagian pecahan'),
+(5, 7, 1, 3, 'English BEC', 'Unit Panorama Jatinangor', 'Privat di Tempat Les', 1, 4, '2026-08-07', 'Self-Introduction & Hobbies', 'Percaya diri berbicara 10 kalimat pembuka.', 88.00, '{"vocabulary": 85, "grammar": 80, "reading": 90, "speaking": 95, "level": "Intermediate A1"}', NULL, NULL, NULL, NULL, NULL, 'Pengucapan intonasi alami dan aktif bertanya.', 'Rekam audio speaking 1 menit', 'Daily activities vocabulary'),
+(6, 10, 2, 1, 'Mengaji & Tahsin', 'Unit Riscon Rancaekek', 'Privat Home Visit', 1, 8, '2026-08-04', 'Tahsin Surah Al-Mulk ayat 1-5', 'Makhraj huruf qaf dan \'\'ain tepat sesuai kaidah.', NULL, '{"kelancaran": "Lancar", "makhraj": "Sangat Baik", "tajwid": "Ikhfa & Idgham Tuntas", "hafalan": "Ayat 1-5 Mutqin"}', 'Sangat Lancar', 'Sesuai Kaidah', 'Menguasai', 'Surah Al-Mulk 1-5', 'Lancar', 'Ananda sangat santun dan fokus selama bimbingan di rumah.', 'Murojaah 3x sebelum tidur', 'Lanjut ayat 6-10');
 
--- Insert Monthly SPP Invoices
-INSERT INTO `invoices` (`id`, `invoice_number`, `student_id`, `period_month`, `package_name`, `milestone_name`, `sessions_count`, `amount`, `due_date`, `status`, `payment_proof_url`, `paid_at`, `notes`) VALUES
-(1, 'INV-RMB-202608-001', 1, 'Agustus 2026', 'Paket Multi-Program (Matematika + English + Mengaji)', 'SPP Agustus 2026 – Paket 8 Pertemuan/Bulan – Lunas', 20, 950000.00, '2026-08-10', 'paid', '/uploads-rumbala/sample-payment.png', '2026-08-05 10:30:00', 'Pembayaran SPP Bulan Agustus 2026 Lunas via Transfer BCA.'),
-(2, 'INV-RMB-202608-002', 2, 'Agustus 2026', 'Paket Ceria (Pracalis + Mengaji)', 'SPP Agustus 2026 – Paket Calistung & Mengaji – Lunas', 12, 480000.00, '2026-08-10', 'paid', '/uploads-rumbala/sample-payment.png', '2026-08-05 10:35:00', 'Pembayaran SPP Bulan Agustus 2026 Lunas via Transfer BCA.');
+-- Invoices (Tagihan SPP Bulanan Multi Program)
+INSERT INTO `invoices` (`id`, `invoice_number`, `student_id`, `period_month`, `amount`, `package_sessions`, `sessions_completed`, `status`, `due_date`, `paid_at`, `payment_method`, `notes`, `items_json`) VALUES
+(1, 'INV/RBL/202608/001', 1, 'Agustus 2026', 730000.00, 12, 9, 'paid', '2026-08-10', '2026-08-08 09:30:00', 'Transfer BCA', 'Tagihan SPP Gabungan 2 Program Bulan Agustus 2026', '[{"program_name": "Cermat Matematika", "unit_name": "Unit Riscon Rancaekek", "class_type": "Semi Privat", "package": 8, "fee": 350000}, {"program_name": "English BEC", "unit_name": "Unit Panorama Jatinangor", "class_type": "Privat di Tempat Les", "package": 4, "fee": 380000}]'),
+(2, 'INV/RBL/202608/002', 2, 'Agustus 2026', 400000.00, 8, 4, 'paid', '2026-08-10', '2026-08-09 14:15:00', 'Transfer BCA', 'Tagihan SPP Mengaji Privat Home Visit Agustus 2026', '[{"program_name": "Mengaji & Tahsin", "unit_name": "Unit Riscon Rancaekek", "class_type": "Privat Home Visit", "package": 8, "fee": 400000}]');
 
--- Insert Invoice Items (Breakdown per Program)
-INSERT INTO `invoice_items` (`id`, `invoice_id`, `program_name`, `description`, `amount`) VALUES
-(1, 1, 'Cermat Matematika', 'SPP Cermat Matematika (8 Sesi/Bulan - Unit Riscon Rancaekek)', 350000.00),
-(2, 1, 'English BEC', 'SPP English BEC (4 Sesi/Bulan - Unit Riscon Rancaekek)', 300000.00),
-(3, 1, 'Mengaji & Tahfidz', 'SPP Mengaji & Tahfidz (8 Sesi/Bulan - Unit Panorama Jatinangor)', 300000.00),
-(4, 2, 'Pracalis Calistung', 'SPP Pracalis Calistung (8 Sesi/Bulan - Unit Riscon Rancaekek)', 280000.00),
-(5, 2, 'Mengaji & Tahfidz', 'SPP Mengaji & Tahfidz Anak (4 Sesi/Bulan - Unit Riscon Rancaekek)', 200000.00);
+-- AI Reports (Laporan Perkembangan Berkala)
+INSERT INTO `ai_reports` (`id`, `student_id`, `tutor_id`, `program_name`, `report_type`, `period`, `milestone_session`, `title`, `summary`, `strengths`, `areas_for_improvement`, `recommendations`, `ai_generated_notes`, `status`) VALUES
+(1, 1, 1, 'Cermat Matematika', 'mid_package', 'Agustus 2026 (Sesi 1-4)', 4, 'Laporan Perkembangan Belajar Cermat Matematika - Mid Package', 'Ananda Keenan menunjukkan perkembangan signifikan dalam penguasaan KPK, FPB, dan pecahan dalam 4 pertemuan pertama.', 'Daya tangkap logika sangat cepat, antusias memecahkan tantangan hitung cepat, mandiri mengerjakan soal latihan.', 'Perlu sedikit melatih ketelitian penulisan langkah runtut pada soal cerita bertingkat.', 'Lanjutkan latihan soal HOTS terapan kontekstual dan apresiasi ketelitian ananda.', 'AI Model: Analisis konsistensi nilai 88-94 dengan peningkatan pemahaman konsep 15% dari level awal.', 'admin_approved');
 
--- Insert AI Reports (Official Progress Report per Program)
-INSERT INTO `ai_reports` (`id`, `student_id`, `tutor_id`, `program_name`, `report_type`, `period`, `title`, `summary`, `strengths`, `areas_for_improvement`, `recommendations`, `ai_generated_notes`, `status`) VALUES
-(1, 1, 1, 'Cermat Matematika', 'monthly', 'Agustus 2026', 'Laporan Perkembangan Cermat Matematika – Agustus 2026', 'Ananda Keenan menunjukkan perkembangan pemahaman matematika yang sangat pesat, terutama dalam penguasaan konsep pecahan, KPK, dan FPB pada bulan Agustus ini.', 'Daya tangkap logika sangat cepat, mampu memecahkan soal cerita HOTS secara mandiri, dan teliti dalam perhitungan bersusun.', 'Perlu membiasakan diri menuliskan satuan akhir (misalnya cm, kg, buah) pada langkah penyelesaian soal cerita panjang.', 'Disarankan untuk terus diberikan tantangan soal cerita kontekstual dan apresiasi positif di rumah.', 'Analisis otomatis AI dari 4 pertemuan jurnal dan rata-rata skor 91.25/100.', 'published'),
-(2, 1, 2, 'English BEC', 'monthly', 'Agustus 2026', 'Laporan Perkembangan English BEC – Agustus 2026', 'Keenan sangat aktif dalam sesi percakapan Bahasa Inggris harian. Kosakata dan keberanian bicaranya meningkat signifikan.', 'Percaya diri berbicara, pemahaman listening sangat baik saat instruksi berbahasa Inggris.', 'Perlu penguatan dalam pemilihan tenses masa lampau (Past Tense) saat bercerita.', 'Sering diajak menyimak lagu atau cerita pendek berbahasa Inggris di rumah.', 'Analisis performa interaktif sesi speaking dan kuis vocabulary.', 'published'),
-(3, 1, 1, 'Mengaji & Tahfidz', 'monthly', 'Agustus 2026', 'Laporan Capaian Mengaji & Tahfidz – Agustus 2026', 'Alhamdulillah, Keenan telah menyelesaikan setoran hafalan Surah Al-Mulk ayat 1-10 dengan kaidah tajwid dan makhraj yang tartil.', 'Makharijul huruf halqi sangat fasih, intonasi bacaan tartil merdu dan bersemangat.', 'Perlu istiqomah meluangkan waktu murojaah harian agar hafalan ayat-ayat sebelumnya tetap mutqin.', 'Dampingi ananda murojaah 10-15 menit ba\'da Maghrib atau Subuh setiap hari.', 'Evaluasi tahsin & tahfidz sesi 1-5.', 'published');
-
--- Insert Tutor Honor Recaps
-INSERT INTO `tutor_honor_recaps` (`id`, `tutor_id`, `period_month`, `total_sessions`, `total_hours`, `rate_per_session`, `total_honor`, `status`, `paid_at`, `notes`) VALUES
-(1, 1, '2026-08', 9, 13.50, 80000.00, 720000.00, 'paid', '2026-08-25 15:00:00', 'Honor mengajar 9 sesi terlaksana di Unit Riscon & Panorama.'),
-(2, 2, '2026-08', 2, 3.00, 95000.00, 190000.00, 'paid', '2026-08-25 15:00:00', 'Honor mengajar 2 sesi English BEC di Unit Riscon.');
+-- Tutor Honor Recaps
+INSERT INTO `tutor_honor_recaps` (`id`, `tutor_id`, `period_month`, `total_sessions`, `home_visit_sessions`, `total_hours`, `rate_per_session`, `total_transport_fee`, `total_teaching_honor`, `total_honor`, `status`, `paid_at`, `notes`, `breakdown_json`) VALUES
+(1, 1, '2026-08', 8, 2, 11.00, 80000.00, 50000.00, 650000.00, 700000.00, 'paid', '2026-08-25 10:00:00', 'Honor Mengajar Sarah Azzahra Periode Agustus 2026 (6 sesi MTK Riscon + 2 sesi Home Visit Tahsin)', '{"programs": [{"name": "Cermat Matematika", "sessions": 6, "rate": 80000, "total": 480000}, {"name": "Mengaji & Tahsin", "sessions": 2, "rate": 85000, "transport": 50000, "total": 220000}]}'),
+(2, 3, '2026-08', 3, 0, 4.50, 85000.00, 0.00, 255000.00, 255000.00, 'unpaid', NULL, 'Honor Mengajar Nabila Maharani Periode Agustus 2026 (3 sesi English BEC)', '{"programs": [{"name": "English BEC", "sessions": 3, "rate": 85000, "transport": 0, "total": 255000}]}');

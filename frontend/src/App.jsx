@@ -16,6 +16,8 @@ import StudentDetail from "./pages/students/StudentDetail";
 import ChildProfile from "./pages/students/ChildProfile";
 import TutorList from "./pages/tutors/TutorList";
 import TutorProfile from "./pages/tutors/TutorProfile";
+import ProgramMasterList from "./pages/programs/ProgramMasterList";
+import UnitMasterList from "./pages/units/UnitMasterList";
 import ScheduleList from "./pages/schedules/ScheduleList";
 import AttendanceList from "./pages/attendance/AttendanceList";
 import RescheduleList from "./pages/reschedule/RescheduleList";
@@ -24,7 +26,9 @@ import AIReportGenerator from "./pages/ai-report/AIReportGenerator";
 import ProgressDashboard from "./pages/progress/ProgressDashboard";
 import InvoiceList from "./pages/invoices/InvoiceList";
 import FinanceReport from "./pages/finances/FinanceReport";
+import TutorAttendanceRecap from "./pages/tutor-recap/TutorAttendanceRecap";
 import TutorRecapList from "./pages/tutor-recap/TutorRecapList";
+import SettingsPage from "./pages/settings/SettingsPage";
 
 // Protected Layout
 function ProtectedLayout() {
@@ -57,6 +61,8 @@ function ProtectedLayout() {
               <Route path="/child-profile" element={<ChildProfile />} />
               <Route path="/tutors" element={<TutorList />} />
               <Route path="/tutor-profile" element={<TutorProfile />} />
+              <Route path="/programs-master" element={<ProgramMasterList />} />
+              <Route path="/units-master" element={<UnitMasterList />} />
               <Route path="/schedules" element={<ScheduleList />} />
               <Route path="/attendance" element={<AttendanceList />} />
               <Route path="/reschedule" element={<RescheduleList />} />
@@ -65,8 +71,10 @@ function ProtectedLayout() {
               <Route path="/progress" element={<ProgressDashboard />} />
               <Route path="/invoices" element={<InvoiceList />} />
               <Route path="/finances" element={<FinanceReport />} />
+              <Route path="/tutor-attendance" element={<TutorAttendanceRecap />} />
               <Route path="/tutor-recaps" element={<TutorRecapList />} />
               <Route path="/tutor-recap" element={<Navigate to="/tutor-recaps" replace />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </main>

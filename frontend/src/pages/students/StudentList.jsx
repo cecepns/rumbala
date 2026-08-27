@@ -25,13 +25,19 @@ import {
   Target,
   FileEdit,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Building2,
+  Layers,
+  ChevronRight
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function StudentList() {
   const { role, user } = useAuth();
   const [students, setStudents] = useState([]);
+  const [tutors, setTutors] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [programsList, setProgramsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [page, setPage] = useState(1);
@@ -40,7 +46,7 @@ export default function StudentList() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
 
-  // Tutor: Edit Data Pembelajaran Siswa Modal
+  // Tutor: Edit Learning Profile Modal
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState(null);
   const [learningProfileForm, setLearningProfileForm] = useState({
     program_name: "",
@@ -53,7 +59,7 @@ export default function StudentList() {
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Admin: CRUD Modal
+  // Admin: Student CRUD Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [formData, setFormData] = useState({
@@ -68,12 +74,44 @@ export default function StudentList() {
     school: "",
     subjects: "Cermat Matematika",
     tuition_fee_per_session: 100000,
+    status: "active",
     notes: ""
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Admin: Manage Multi-Program per Student Modal
+  const [isProgramModalOpen, setIsProgramModalOpen] = useState(false);
+  const [selectedStudentForProgram, setSelectedStudentForProgram] = useState(null);
+  const [editingProgramItem, setEditingProgramItem] = useState(null);
+  const [programFormData, setProgramFormData] = useState({
+    program_name: "Cermat Matematika",
+    unit_name: "Unit Riscon Rancaekek",
+    class_type: "Semi Privat",
+    tutor_id: "",
+    package_sessions: 8,
+    monthly_fee: 350000,
+    schedule_info: "",
+    status: "active"
+  });
+  const [isSavingProgram, setIsSavingProgram] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchOptions = async () => {
+    try {
+      const [tRes, uRes, pRes] = await Promise.all([
+        request.get(API_ENDPOINTS.TUTORS.LIST),
+        request.get(API_ENDPOINTS.UNITS.LIST),
+        request.get(API_ENDPOINTS.PROGRAMS.LIST)
+      ]);
+      if (tRes.success) setTutors(tRes.data || []);
+      if (uRes.success) setUnits(uRes.data || []);
+      if (pRes.success) setProgramsList(pRes.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -107,6 +145,10 @@ export default function StudentList() {
       setLoading(false);
     }
   }, [page, limit, search, role]);
+
+  useEffect(() => {
+    fetchOptions();
+  }, []);
 
   useEffect(() => {
     fetchStudents();
@@ -147,8 +189,8 @@ export default function StudentList() {
     }
   };
 
-  // Admin CRUD Handlers
-  const handleOpenCreate = () => {
+  // Admin Student CRUD Handlers
+  const handleOpenCreateStudent = () => {
     setEditingStudent(null);
     setFormData({
       name: "",
@@ -162,31 +204,33 @@ export default function StudentList() {
       school: "",
       subjects: "Cermat Matematika",
       tuition_fee_per_session: 100000,
+      status: "active",
       notes: ""
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (student) => {
-    setEditingStudent(student);
+  const handleOpenEditStudent = (st) => {
+    setEditingStudent(st);
     setFormData({
-      name: student.name,
-      nickname: student.nickname || student.name,
-      birth_date: student.birth_date ? student.birth_date.split("T")[0] : "",
-      parent_name: student.parent_name,
-      parent_phone: student.parent_phone,
-      parent_email: student.parent_email || "",
-      address: student.address || "",
-      class_grade: student.class_grade,
-      school: student.school,
-      subjects: student.subjects,
-      tuition_fee_per_session: student.tuition_fee_per_session,
-      notes: student.notes || ""
+      name: st.name,
+      nickname: st.nickname || "",
+      birth_date: st.birth_date ? new Date(st.birth_date).toISOString().split("T")[0] : "",
+      parent_name: st.parent_name,
+      parent_phone: st.parent_phone,
+      parent_email: st.parent_email || "",
+      address: st.address || "",
+      class_grade: st.class_grade,
+      school: st.school,
+      subjects: st.subjects || "Cermat Matematika",
+      tuition_fee_per_session: st.tuition_fee_per_session || 100000,
+      status: st.status || "active",
+      notes: st.notes || ""
     });
     setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSaveStudent = async (e) => {
     e.preventDefault();
     try {
       setIsSaving(true);
@@ -212,13 +256,13 @@ export default function StudentList() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteStudent = async () => {
     if (!deleteTarget) return;
     try {
       setIsDeleting(true);
       const res = await request.delete(API_ENDPOINTS.STUDENTS.DELETE(deleteTarget.id));
       if (res.success) {
-        toast.success("Siswa berhasil dihapus.");
+        toast.success("Data siswa berhasil dihapus.");
         setDeleteTarget(null);
         fetchStudents();
       }
@@ -229,512 +273,729 @@ export default function StudentList() {
     }
   };
 
+  // Program Management Modal Handlers
+  const handleOpenAddProgram = (student) => {
+    setSelectedStudentForStudent(student);
+    setEditingProgramItem(null);
+    setProgramFormData({
+      student_id: student.id,
+      program_name: programsList[0]?.name || "Cermat Matematika",
+      unit_name: units[0]?.name || "Unit Riscon Rancaekek",
+      class_type: "Semi Privat",
+      tutor_id: tutors[0]?.id || "",
+      package_sessions: 8,
+      monthly_fee: programsList[0]?.default_fee || 350000,
+      schedule_info: "",
+      status: "active"
+    });
+    setIsProgramModalOpen(true);
+  };
+
+  const setSelectedStudentForStudent = (student) => {
+    setSelectedStudentForProgram(student);
+  };
+
+  const handleOpenEditProgram = (student, progItem) => {
+    setSelectedStudentForProgram(student);
+    setEditingProgramItem(progItem);
+    setProgramFormData({
+      student_id: student.id,
+      program_name: progItem.program_name,
+      unit_name: progItem.unit_name || "Unit Riscon Rancaekek",
+      class_type: progItem.class_type || "Semi Privat",
+      tutor_id: progItem.tutor_id || "",
+      package_sessions: progItem.package_sessions || 8,
+      monthly_fee: progItem.monthly_fee || 350000,
+      schedule_info: progItem.schedule_info || "",
+      status: progItem.status || "active"
+    });
+    setIsProgramModalOpen(true);
+  };
+
+  const handleSaveProgram = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSavingProgram(true);
+      if (editingProgramItem) {
+        const res = await request.put(API_ENDPOINTS.STUDENT_PROGRAMS.UPDATE(editingProgramItem.id), programFormData);
+        if (res.success) {
+          toast.success("Program bimbingan siswa berhasil diperbarui!");
+          setIsProgramModalOpen(false);
+          fetchStudents();
+        }
+      } else {
+        const res = await request.post(API_ENDPOINTS.STUDENT_PROGRAMS.CREATE, {
+          ...programFormData,
+          student_id: selectedStudentForProgram?.id
+        });
+        if (res.success) {
+          toast.success("Program bimbingan baru berhasil ditambahkan!");
+          setIsProgramModalOpen(false);
+          fetchStudents();
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Gagal menyimpan program siswa");
+    } finally {
+      setIsSavingProgram(false);
+    }
+  };
+
+  const handleDeleteProgram = async (progId) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus program ini dari siswa?")) return;
+    try {
+      const res = await request.delete(API_ENDPOINTS.STUDENT_PROGRAMS.DELETE(progId));
+      if (res.success) {
+        toast.success("Program siswa berhasil dihapus.");
+        fetchStudents();
+      }
+    } catch (err) {
+      toast.error("Gagal menghapus program");
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
-            {role === "tutor" ? "Portal Tutor" : "Manajemen Lembaga"}
+            {role === "tutor" ? "Portal Tutor Pengajar" : "Manajemen Administrasi Siswa"}
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            {role === "tutor" ? "Siswa Saya" : "Data Siswa & Program Belajar"}
+            {role === "tutor" ? "Daftar Siswa Bimbingan Saya" : "Data Siswa & Multi-Program"}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {role === "tutor"
-              ? "Daftar siswa bimbingan yang Anda ampu lengkap dengan unit, jenis kelas, paket, progress bulan berjalan, dan data profil pembelajaran."
-              : "Kelola data master siswa, relasi akun orang tua, paket bimbingan, dan program yang diambil."}
+              ? "Kelola catatan capaian awal, kekuatan, target, dan kebutuhan khusus anak didik."
+              : "Satu siswa dapat mengambil lebih dari satu program (Matematika di Riscon, English di Panorama, dll) dengan data mandiri."}
           </p>
         </div>
 
-        {role === "admin" ? (
+        {role !== "tutor" && (
           <button
-            onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-primary-500/30 transition-all cursor-pointer"
+            onClick={handleOpenCreateStudent}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Tambah Siswa Baru
+            Daftarkan Siswa Baru
           </button>
-        ) : (
-          <a
-            href={createWhatsAppUrl("081212788313", `Halo Admin Rumbala, saya Tutor ${user?.name || "Rumbala"} ingin melakukan koordinasi terkait siswa bimbingan.`)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Hubungi Admin
-          </a>
         )}
       </div>
 
-      {/* Search & Actions Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="w-full sm:w-80">
-          <DebouncedSearch
-            value={search}
-            onChange={setSearch}
-            placeholder="Cari nama siswa, sekolah, atau program..."
-          />
-        </div>
+      {/* Filter & Search */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <DebouncedSearch
+          placeholder="Cari nama siswa, orang tua, sekolah, no WA..."
+          onSearch={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          className="w-full sm:w-96"
+        />
 
-        <div className="text-xs text-slate-500 font-semibold self-start sm:self-center">
-          Total: <strong className="text-slate-800">{total} Siswa</strong>
+        <div className="text-xs font-semibold text-slate-500">
+          Total: <strong className="text-slate-800">{total}</strong> Siswa Terdata
         </div>
       </div>
 
-      {/* Student List View */}
-      {role === "tutor" ? (
-        /* Tutor View: "Siswa Saya" Cards without CRUD / Fee */
-        loading ? (
-          <TableSkeleton rows={3} cols={3} />
-        ) : students.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Belum Ada Siswa yang Ditugaskan"
-            description="Admin akan menentukan siswa asuhan dan program yang Anda ampu."
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {students.map((st) => (
-              <div
-                key={st.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4"
-              >
-                <div>
-                  {/* Student Header */}
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-extrabold text-sm shrink-0">
-                        {st.name?.charAt(0) || "S"}
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-sm text-slate-900">{st.name}</h3>
-                        <p className="text-xs text-slate-500 font-medium">{st.class_grade} &bull; {st.school}</p>
-                      </div>
-                    </div>
-
-                    <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 shrink-0">
-                      {st.completed_sessions_month || 0}/{st.package_sessions || 8} Sesi
-                    </span>
+      {/* Students List Container */}
+      {loading ? (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+          <TableSkeleton rows={4} cols={5} />
+        </div>
+      ) : students.length > 0 ? (
+        <div className="space-y-4">
+          {students.map((st) => (
+            <div
+              key={st.id}
+              className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden hover:border-primary-200 transition-all p-5 space-y-4"
+            >
+              {/* Header: Student Identity */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
+                    {st.name?.charAt(0) || "S"}
                   </div>
-
-                  {/* Tutor Info Details */}
-                  <div className="mt-3 space-y-2 text-xs text-slate-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <BookOpen className="w-3.5 h-3.5 text-primary-600" />
-                        <span className="text-slate-500">Program:</span>
-                        <span className="font-extrabold text-slate-900">{st.program_name}</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-bold">
-                        {st.class_type || "Semi Privat"}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-extrabold text-slate-900">{st.name}</h2>
+                      {st.nickname && (
+                        <span className="text-xs font-bold text-slate-400">({st.nickname})</span>
+                      )}
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 text-sky-800">
+                        {st.class_grade}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-slate-500">Unit:</span>
-                      <span className="font-semibold text-slate-800">{st.unit_name || "Unit Riscon"}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="text-slate-500">Jadwal:</span>
-                      <span className="font-semibold text-slate-800">{st.schedule_info || "Senin & Kamis 15.30"}</span>
-                    </div>
-
-                    {/* Data Pembelajaran Highlights */}
-                    <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5 text-[11px]">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-700 uppercase text-[10px]">Data Pembelajaran:</span>
-                        <span className="text-slate-400">{st.initial_level || "Level Dasar"}</span>
-                      </div>
-                      {st.strengths && (
-                        <p className="text-emerald-900 leading-snug">
-                          <strong className="text-emerald-800">Kekuatan:</strong> {st.strengths}
-                        </p>
-                      )}
-                      {st.learning_targets && (
-                        <p className="text-sky-900 leading-snug">
-                          <strong className="text-sky-800">Target:</strong> {st.learning_targets}
-                        </p>
-                      )}
-                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                      <School className="w-3.5 h-3.5 text-slate-400" /> {st.school || "Sekolah Umum"} &bull;{" "}
+                      <span>Ortu: <strong>{st.parent_name}</strong></span>
+                    </p>
                   </div>
                 </div>
 
-                {/* Tutor Actions: Edit Learning Profile */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 font-medium">Status: <strong className="text-emerald-700 font-bold">Aktif</strong></span>
-                  <button
-                    onClick={() => handleOpenLearningProfile(st)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <FileEdit className="w-3.5 h-3.5" />
-                    Data Pembelajaran
-                  </button>
+                <div className="flex items-center gap-2">
+                  {role !== "tutor" && st.parent_phone && (
+                    <button
+                      onClick={() => {
+                        const url = createWhatsAppUrl(st.parent_phone, `Halo Ayah/Bunda dari ananda ${st.name}`);
+                        window.open(url, "_blank");
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" /> WA Ortu
+                    </button>
+                  )}
+
+                  {role !== "tutor" && (
+                    <button
+                      onClick={() => handleOpenAddProgram(st)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 hover:bg-primary-100 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Ambil Program Lain
+                    </button>
+                  )}
+
+                  {role !== "tutor" && (
+                    <button
+                      onClick={() => handleOpenEditStudent(st)}
+                      title="Edit Data Siswa"
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {role !== "tutor" && (
+                    <button
+                      onClick={() => setDeleteTarget(st)}
+                      title="Hapus Siswa"
+                      className="p-1.5 rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        )
-      ) : (
-        /* Admin View: Full Table with CRUD */
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          {loading ? (
-            <TableSkeleton rows={5} cols={5} />
-          ) : students.length === 0 ? (
-            <EmptyState
-              icon={Users}
-              title="Belum Ada Data Siswa"
-              description="Tambahkan data siswa bimbingan pertama Anda sekarang."
-              actionText="Tambah Siswa"
-              onAction={handleOpenCreate}
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-4">Nama Siswa</th>
-                    <th className="px-6 py-4">Wali & Kontak</th>
-                    <th className="px-6 py-4">Program yang Diikuti</th>
-                    <th className="px-6 py-4">Sesi Selesai</th>
-                    <th className="px-6 py-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {students.map((st) => (
-                    <tr key={st.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-extrabold text-slate-900 text-sm">{st.name}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{st.class_grade} &bull; {st.school}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800">{st.parent_name}</p>
-                        <p className="text-[11px] text-slate-500">{st.parent_phone}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        {st.programs && st.programs.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {st.programs.map((p) => (
-                              <span key={p.id} className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-bold">
-                                {p.program_name} ({p.completed_sessions_month}/{p.package_sessions})
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-slate-600 font-semibold">{st.subjects}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 font-bold text-emerald-700">
-                        {st.total_sessions_completed || 0} Sesi
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(st)}
-                            className="p-1.5 text-slate-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Siswa"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(st)}
-                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="Hapus Siswa"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
-          <Pagination
-            currentPage={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            limit={limit}
-            onLimitChange={setLimit}
-            totalItems={total}
-          />
+              {/* Programs Section */}
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-primary-600" />
+                  Program Bimbingan yang Diambil (Multi-Program):
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {st.programs && st.programs.length > 0 ? (
+                    st.programs.map((prog, idx) => (
+                      <div
+                        key={prog.id || idx}
+                        className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-white hover:border-primary-300 transition-all space-y-2.5 flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-1">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-primary-600 tracking-wider">
+                                Program #{idx + 1}
+                              </span>
+                              <h3 className="text-sm font-extrabold text-slate-900">{prog.program_name}</h3>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                              Paket {prog.package_sessions || 8}x / Bln
+                            </span>
+                          </div>
+
+                          <div className="mt-2 space-y-1 text-xs text-slate-600">
+                            <p className="flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{prog.unit_name || "Unit Riscon Rancaekek"}</span>
+                            </p>
+                            <p className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+                                {prog.class_type || "Semi Privat"}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              👩‍🏫 Tutor: <strong>{prog.tutor_name || "Tutor Belum Ditugaskan"}</strong>
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              🗓️ Jadwal: <span>{prog.schedule_info || "Sesuai Jadwal Les"}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Tarif SPP:</span>
+                            <span className="font-extrabold text-slate-800">{formatRupiah(prog.monthly_fee)}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px]">
+                              {prog.completed_sessions_month || 0}/{prog.package_sessions || 8} Sesi
+                            </span>
+                            {role !== "tutor" && (
+                              <button
+                                onClick={() => handleOpenEditProgram(st, prog)}
+                                title="Edit Program Siswa"
+                                className="p-1 text-slate-400 hover:text-slate-700"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {role !== "tutor" && st.programs.length > 1 && (
+                              <button
+                                onClick={() => handleDeleteProgram(prog.id)}
+                                title="Hapus Program Ini"
+                                className="p-1 text-red-400 hover:text-red-600"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
+                      Belum ada program aktif. Klik tombol "+ Ambil Program Lain" untuk menambahkan.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tutor Learning Profile Quick Button */}
+              {role === "tutor" && (
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Profil Pembelajaran: {st.initial_level || "Belum diisi"}</span>
+                  <button
+                    onClick={() => handleOpenLearningProfile(st)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <FileEdit className="w-3.5 h-3.5" />
+                    Update Catatan Belajar Siswa
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={total}
+              limit={limit}
+              onPageChange={setPage}
+              onLimitChange={(newLimit) => {
+                setLimit(newLimit);
+                setPage(1);
+              }}
+            />
+          </div>
         </div>
+      ) : (
+        <EmptyState
+          icon={Users}
+          title="Tidak Ada Data Siswa"
+          description="Belum ada data siswa yang tersimpan."
+          actionText={role !== "tutor" ? "Daftarkan Siswa Baru" : undefined}
+          onAction={role !== "tutor" ? handleOpenCreateStudent : undefined}
+        />
       )}
 
-      {/* Modal Tutor: Edit Data Pembelajaran Siswa */}
+      {/* Modal 1: Create/Edit Student Master Info */}
       <Modal
-        isOpen={!!selectedStudentForProfile}
-        onClose={() => setSelectedStudentForProfile(null)}
-        title={`Data Pembelajaran: ${selectedStudentForProfile?.name}`}
-        maxWidth="max-w-xl"
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingStudent ? "Ubah Identitas Siswa" : "Daftarkan Siswa Baru"}
+        subtitle="Lengkapi identitas anak, orang tua, dan kontak wali"
       >
-        <form onSubmit={handleSaveLearningProfile} className="space-y-4">
-          <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900">
-            <span className="font-bold flex items-center gap-1 mb-0.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Catatan Pembelajaran Fondasional
-            </span>
-            Data ini cukup diisi pada awal bimbingan atau diperbarui saat ada perkembangan signifikan, tanpa perlu diulang setiap pertemuan.
+        <form onSubmit={handleSaveStudent} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Nama Lengkap Anak *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Contoh: Keenan Alvaro Pratama"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20 font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Nama Panggilan
+              </label>
+              <input
+                type="text"
+                value={formData.nickname}
+                onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
+                placeholder="Contoh: Keenan"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Kelas / Grade *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.class_grade}
+                onChange={(e) => setFormData({ ...formData, class_grade: e.target.value })}
+                placeholder="Contoh: Kelas 5 SD / TK B"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Asal Sekolah
+              </label>
+              <input
+                type="text"
+                value={formData.school}
+                onChange={(e) => setFormData({ ...formData, school: e.target.value })}
+                placeholder="Contoh: SDIT Al-Madani"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tanggal Lahir
+              </label>
+              <input
+                type="date"
+                value={formData.birth_date}
+                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Nama Orang Tua / Wali *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.parent_name}
+                onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
+                placeholder="Contoh: Bunda Rina & Ayah Dimas"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Nomor WhatsApp Orang Tua *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.parent_phone}
+                onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
+                placeholder="Contoh: 081234567890"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Program Belajar
+              Alamat Rumah Siswa (Digunakan juga untuk Privat Home Visit)
+            </label>
+            <textarea
+              rows={2}
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              placeholder="Alamat perumahan / jalan tempat tinggal siswa..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {isSaving ? "Menyimpan..." : editingStudent ? "Perbarui Siswa" : "Daftarkan Siswa"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal 2: Add/Edit Program for Student (Multi-Program) */}
+      <Modal
+        isOpen={isProgramModalOpen}
+        onClose={() => setIsProgramModalOpen(false)}
+        title={editingProgramItem ? "Ubah Program Siswa" : `Tambah Program: ${selectedStudentForProgram?.name}`}
+        subtitle="Setiap program memiliki unit, jenis kelas, paket, tutor, dan tarif tersendiri"
+      >
+        <form onSubmit={handleSaveProgram} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Pilih Program Bimbingan *
+              </label>
+              <select
+                value={programFormData.program_name}
+                onChange={(e) => {
+                  const selName = e.target.value;
+                  const found = programsList.find((p) => p.name === selName);
+                  setProgramFormData({
+                    ...programFormData,
+                    program_name: selName,
+                    monthly_fee: found?.default_fee || programFormData.monthly_fee
+                  });
+                }}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              >
+                {programsList.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Unit Cabang Belajar *
+              </label>
+              <select
+                value={programFormData.unit_name}
+                onChange={(e) => setProgramFormData({ ...programFormData, unit_name: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              >
+                {units.map((u) => (
+                  <option key={u.id} value={u.name}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Pilihan Jenis Kelas *
+              </label>
+              <select
+                value={programFormData.class_type}
+                onChange={(e) => setProgramFormData({ ...programFormData, class_type: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              >
+                <option value="Semi Privat">Semi Privat</option>
+                <option value="Privat di Tempat Les">Privat di Tempat Les</option>
+                <option value="Online Privat">Online Privat</option>
+                <option value="Online Semi Privat">Online Semi Privat</option>
+                <option value="Privat Home Visit">Privat Home Visit (Rumah Siswa)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Paket Pertemuan / Bulan *
+              </label>
+              <select
+                value={programFormData.package_sessions}
+                onChange={(e) => setProgramFormData({ ...programFormData, package_sessions: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              >
+                <option value={4}>Paket 4x Pertemuan / Bulan (1x seminggu)</option>
+                <option value={8}>Paket 8x Pertemuan / Bulan (2x seminggu)</option>
+                <option value={12}>Paket 12x Pertemuan / Bulan (3x seminggu)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tutor Pengajar Yang Ditugaskan
+              </label>
+              <select
+                value={programFormData.tutor_id}
+                onChange={(e) => setProgramFormData({ ...programFormData, tutor_id: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              >
+                <option value="">-- Pilih Tutor Pengajar --</option>
+                {tutors.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.subjects})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tarif SPP Bulanan Program Ini (Rp) *
+              </label>
+              <input
+                type="number"
+                required
+                min="0"
+                step="5000"
+                value={programFormData.monthly_fee}
+                onChange={(e) => setProgramFormData({ ...programFormData, monthly_fee: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Informasi Hari & Jam Jadwal
             </label>
             <input
               type="text"
-              value={learningProfileForm.program_name}
-              disabled
-              className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
+              value={programFormData.schedule_info}
+              onChange={(e) => setProgramFormData({ ...programFormData, schedule_info: e.target.value })}
+              placeholder="Contoh: Senin & Rabu 15:30 - 17:00"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
           </div>
 
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsProgramModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingProgram}
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {isSavingProgram ? "Menyimpan..." : editingProgramItem ? "Perbarui Program" : "Simpan Program Siswa"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal 3: Tutor Edit Learning Profile */}
+      <Modal
+        isOpen={!!selectedStudentForProfile}
+        onClose={() => setSelectedStudentForProfile(null)}
+        title={`Profil Pembelajaran: ${selectedStudentForProfile?.name}`}
+        subtitle={`Program: ${selectedStudentForProfile?.program_name}`}
+      >
+        <form onSubmit={handleSaveLearningProfile} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Kemampuan / Level Awal Siswa
+              Level Awal Siswa
             </label>
             <input
               type="text"
               value={learningProfileForm.initial_level}
               onChange={(e) => setLearningProfileForm({ ...learningProfileForm, initial_level: e.target.value })}
-              placeholder="Contoh: Pemahaman Pecahan Dasar / Iqro 4 / Juz 30 Surah Al-Mulk"
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+              placeholder="Contoh: Pemahaman Pecahan Dasar (Grade 5)"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Kekuatan Siswa
-              </label>
-              <textarea
-                rows={2}
-                value={learningProfileForm.strengths}
-                onChange={(e) => setLearningProfileForm({ ...learningProfileForm, strengths: e.target.value })}
-                placeholder="Contoh: Logika cepat tangkap, makhraj fasih..."
-                className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Bagian yang Perlu Ditingkatkan
-              </label>
-              <textarea
-                rows={2}
-                value={learningProfileForm.areas_for_improvement}
-                onChange={(e) => setLearningProfileForm({ ...learningProfileForm, areas_for_improvement: e.target.value })}
-                placeholder="Contoh: Ketelitian menuliskan rumus, murojaah mandiri..."
-                className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs"
-              />
-            </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Target Pembelajaran
+              Kekuatan & Potensi Siswa
+            </label>
+            <textarea
+              rows={2}
+              value={learningProfileForm.strengths}
+              onChange={(e) => setLearningProfileForm({ ...learningProfileForm, strengths: e.target.value })}
+              placeholder="Daya tangkap cepat, percaya diri saat menjawab soal..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Bagian yang Perlu Ditingkatkan
+            </label>
+            <textarea
+              rows={2}
+              value={learningProfileForm.areas_for_improvement}
+              onChange={(e) => setLearningProfileForm({ ...learningProfileForm, areas_for_improvement: e.target.value })}
+              placeholder="Perlu pembiasaan menuliskan langkah runtut..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Target Pembelajaran Sesi Mendatang
             </label>
             <input
               type="text"
               value={learningProfileForm.learning_targets}
               onChange={(e) => setLearningProfileForm({ ...learningProfileForm, learning_targets: e.target.value })}
               placeholder="Contoh: Menguasai KPK, FPB, dan Pecahan Campuran"
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Kebutuhan Belajar Khusus (Opsional)
-              </label>
-              <input
-                type="text"
-                value={learningProfileForm.special_needs}
-                onChange={(e) => setLearningProfileForm({ ...learningProfileForm, special_needs: e.target.value })}
-                placeholder="Contoh: Memerlukan visual gambar / media interaktif"
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Catatan Penting Pembelajaran
-              </label>
-              <input
-                type="text"
-                value={learningProfileForm.important_notes}
-                onChange={(e) => setLearningProfileForm({ ...learningProfileForm, important_notes: e.target.value })}
-                placeholder="Contoh: Sangat antusias saat diberi kuis tantangan"
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Kebutuhan Khusus & Pendekatan Belajar
+            </label>
+            <textarea
+              rows={2}
+              value={learningProfileForm.important_notes}
+              onChange={(e) => setLearningProfileForm({ ...learningProfileForm, important_notes: e.target.value })}
+              placeholder="Gunakan gamifikasi atau media visual..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+            />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setSelectedStudentForProfile(null)}
-              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSavingProfile}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
             >
-              {isSavingProfile ? "Menyimpan..." : "Simpan Data Pembelajaran"}
+              {isSavingProfile ? "Menyimpan..." : "Simpan Profil Pembelajaran"}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Modal CRUD Siswa (Admin Only) */}
-      {role === "admin" && (
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={editingStudent ? "Edit Data Siswa" : "Tambah Siswa Baru"}
-          maxWidth="max-w-xl"
-        >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Nama Lengkap Siswa
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Keenan Alvaro"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Nama Panggilan
-                </label>
-                <input
-                  type="text"
-                  value={formData.nickname}
-                  onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
-                  placeholder="Keenan"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Kelas / Tingkat
-                </label>
-                <input
-                  type="text"
-                  value={formData.class_grade}
-                  onChange={(e) => setFormData({ ...formData, class_grade: e.target.value })}
-                  placeholder="Kelas 5 SD"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Asal Sekolah
-                </label>
-                <input
-                  type="text"
-                  value={formData.school}
-                  onChange={(e) => setFormData({ ...formData, school: e.target.value })}
-                  placeholder="SDIT Al-Azhar"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Nama Orang Tua / Wali
-                </label>
-                <input
-                  type="text"
-                  value={formData.parent_name}
-                  onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
-                  placeholder="Ibu Ratna Sari"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  No. WhatsApp Wali
-                </label>
-                <input
-                  type="text"
-                  value={formData.parent_phone}
-                  onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
-                  placeholder="081388776655"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Program Bimbingan
-              </label>
-              <input
-                type="text"
-                value={formData.subjects}
-                onChange={(e) => setFormData({ ...formData, subjects: e.target.value })}
-                placeholder="Cermat Matematika, English BEC, Mengaji & Tahfidz"
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
-                required
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-              >
-                {isSaving ? "Menyimpan..." : "Simpan Data Siswa"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
       {/* Confirm Delete Dialog */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
+        onConfirm={handleDeleteStudent}
         title="Hapus Data Siswa"
-        message={`Apakah Anda yakin ingin menghapus siswa ${deleteTarget?.name}? Data kehadiran dan jadwal terkait juga akan terhapus.`}
+        message={`Apakah Anda yakin ingin menghapus data siswa "${deleteTarget?.name}" beserta seluruh programnya?`}
         isLoading={isDeleting}
       />
     </div>

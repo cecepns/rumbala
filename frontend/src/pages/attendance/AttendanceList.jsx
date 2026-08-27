@@ -21,7 +21,10 @@ import {
   Calendar,
   MapPin,
   Sparkles,
-  User
+  User,
+  Building2,
+  Car,
+  Home
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -49,22 +52,20 @@ export default function AttendanceList() {
     tutor_id: "",
     program_name: "Cermat Matematika",
     unit_name: "Unit Riscon Rancaekek",
+    class_type: "Semi Privat",
+    is_home_visit: 0,
     date: new Date().toISOString().split("T")[0],
     start_time: "15:30",
     end_time: "17:00",
+    duration_minutes: 90,
     status: "hadir",
     notes: "",
     session_number: 1,
     package_total: 8,
-    // Integrated Teaching Journal
+    // Integrated Brief Teaching Journal
     topic: "",
     targets_achieved: "",
     score: 85,
-    fluency_rating: "Baik",
-    makhraj_rating: "Sesuai Kaidah",
-    tajwid_rating: "Menguasai",
-    memorization_surah: "",
-    murojaah_status: "Lancar",
     progress_notes: "",
     homework: "",
     next_target: ""
@@ -133,26 +134,25 @@ export default function AttendanceList() {
 
   const handleOpenCreate = () => {
     const firstStudent = students[0];
+    const initialProg = firstStudent?.programs?.[0] || firstStudent;
     setFormData({
       student_id: firstStudent?.id || "",
-      tutor_id: user?.tutor_id || tutors[0]?.id || "",
-      program_name: firstStudent?.program_name || programs[0]?.name || "Cermat Matematika",
-      unit_name: firstStudent?.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
+      tutor_id: user?.tutor_id || firstStudent?.tutor_id || tutors[0]?.id || "",
+      program_name: initialProg?.program_name || programs[0]?.name || "Cermat Matematika",
+      unit_name: initialProg?.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
+      class_type: initialProg?.class_type || "Semi Privat",
+      is_home_visit: initialProg?.class_type === "Privat Home Visit" ? 1 : 0,
       date: new Date().toISOString().split("T")[0],
       start_time: "15:30",
       end_time: "17:00",
+      duration_minutes: 90,
       status: "hadir",
       notes: "",
-      session_number: (firstStudent?.completed_sessions_month || 0) + 1,
-      package_total: firstStudent?.package_sessions || 8,
+      session_number: (initialProg?.completed_sessions_month || 0) + 1,
+      package_total: initialProg?.package_sessions || 8,
       topic: "",
       targets_achieved: "",
       score: 85,
-      fluency_rating: "Baik",
-      makhraj_rating: "Sesuai Kaidah",
-      tajwid_rating: "Menguasai",
-      memorization_surah: "",
-      murojaah_status: "Lancar",
       progress_notes: "",
       homework: "",
       next_target: ""
@@ -161,14 +161,17 @@ export default function AttendanceList() {
   };
 
   const handleStudentChangeInForm = (studentId) => {
-    const st = students.find((s) => s.id === Number(studentId));
+    const st = students.find((s) => s.id === parseInt(studentId));
+    const prog = st?.programs?.[0] || st;
     setFormData((prev) => ({
       ...prev,
       student_id: studentId,
-      program_name: st?.program_name || prev.program_name,
-      unit_name: st?.unit_name || prev.unit_name,
-      session_number: (st?.completed_sessions_month || 0) + 1,
-      package_total: st?.package_sessions || 8,
+      program_name: prog?.program_name || prev.program_name,
+      unit_name: prog?.unit_name || prev.unit_name,
+      class_type: prog?.class_type || prev.class_type,
+      is_home_visit: prog?.class_type === "Privat Home Visit" ? 1 : 0,
+      session_number: (prog?.completed_sessions_month || 0) + 1,
+      package_total: prog?.package_sessions || 8,
     }));
   };
 
@@ -176,14 +179,18 @@ export default function AttendanceList() {
     e.preventDefault();
     try {
       setIsSaving(true);
-      const res = await request.post(API_ENDPOINTS.ATTENDANCES.CREATE, formData);
+      const isHome = formData.class_type === "Privat Home Visit" ? 1 : 0;
+      const res = await request.post(API_ENDPOINTS.ATTENDANCES.CREATE, {
+        ...formData,
+        is_home_visit: isHome
+      });
       if (res.success) {
-        toast.success(res.message || "Presensi sesi berhasil dicatat!");
+        toast.success("Presensi dan catatan belajar berhasil disimpan!");
         setIsModalOpen(false);
         fetchAttendances();
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Gagal mencatat kehadiran");
+      toast.error(err.response?.data?.message || "Gagal menyimpan absensi");
     } finally {
       setIsSaving(false);
     }
@@ -192,62 +199,41 @@ export default function AttendanceList() {
   const getStatusBadge = (st) => {
     switch (st) {
       case "hadir":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            Hadir
-          </span>
-        );
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800"><CheckCircle className="w-3 h-3" /> Hadir Terlaksana</span>;
       case "izin":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800">
-            <Clock className="w-3.5 h-3.5 text-sky-600" />
-            Izin
-          </span>
-        );
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800"><Clock className="w-3 h-3" /> Izin</span>;
       case "sakit":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-            Sakit (Pengecualian)
-          </span>
-        );
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800"><AlertCircle className="w-3 h-3" /> Sakit</span>;
       case "alfa":
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800"><XCircle className="w-3 h-3" /> Alfa</span>;
       default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
-            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-            Alfa
-          </span>
-        );
+        return <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">{st}</span>;
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
-            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Absensi"}
+            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Presensi"}
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            {role === "parent" ? "Riwayat Kehadiran & Pertemuan" : "Pencatatan Kehadiran Siswa"}
+            {role === "parent" ? "Riwayat Kehadiran Ananda" : "Absensi & Presensi Sesi Bimbingan"}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {role === "parent"
-              ? "Riwayat sesi bimbingan belajar ananda per program beserta status kehadiran dan materi tuntas."
-              : "Catat presensi dan jurnal sesi pembelajaran siswa asuhan Anda di Rumbala."}
+            Sesi yang benar-benar terlaksana (Hadir) menjadi dasar perhitungan progress siswa, rekap kehadiran, dan honor tutor.
           </p>
         </div>
 
         {role !== "parent" && (
           <button
             onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-emerald-500/30 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Catat Kehadiran Sesi
+            Catat Kehadiran Baru
           </button>
         )}
       </div>
@@ -255,31 +241,38 @@ export default function AttendanceList() {
       {/* Parent Filter Bar */}
       {role === "parent" && <ParentFilterBar />}
 
-      {/* Filters and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="w-full md:w-72">
-          <DebouncedSearch
-            value={search}
-            onChange={setSearch}
-            placeholder="Cari siswa, program, atau tutor..."
-          />
-        </div>
+      {/* Filter & Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <DebouncedSearch
+          placeholder="Cari nama siswa, materi, topik..."
+          onSearch={(val) => {
+            setSearch(val);
+            setPage(1);
+          }}
+          className="w-full sm:w-80"
+        />
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <input
             type="date"
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            onChange={(e) => {
+              setDateFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold"
           />
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold"
           >
             <option value="">Semua Status</option>
-            <option value="hadir">Hadir</option>
+            <option value="hadir">Hadir Terlaksana</option>
             <option value="izin">Izin</option>
             <option value="sakit">Sakit</option>
             <option value="alfa">Alfa</option>
@@ -287,342 +280,339 @@ export default function AttendanceList() {
         </div>
       </div>
 
-      {/* Attendances Table */}
+      {/* Attendance Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         {loading ? (
-          <TableSkeleton rows={5} cols={6} />
-        ) : attendances.length === 0 ? (
-          <EmptyState
-            icon={CheckSquare}
-            title="Belum Ada Riwayat Kehadiran"
-            description="Riwayat presensi pertemuan sesi les akan ditampilkan di sini."
-          />
-        ) : (
+          <div className="p-6">
+            <TableSkeleton rows={5} cols={7} />
+          </div>
+        ) : attendances.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-extrabold uppercase tracking-wider">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px]">
                 <tr>
-                  <th className="px-6 py-4">Siswa & Program</th>
-                  <th className="px-6 py-4">Pertemuan & Paket</th>
-                  <th className="px-6 py-4">Tanggal & Waktu</th>
-                  <th className="px-6 py-4">Tutor & Unit</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Materi Pembelajaran</th>
+                  <th className="py-3.5 px-4">Tanggal & Jam</th>
+                  <th className="py-3.5 px-4">Siswa & Kelas</th>
+                  <th className="py-3.5 px-4">Tutor Pengajar</th>
+                  <th className="py-3.5 px-4">Program & Unit</th>
+                  <th className="py-3.5 px-4">Jenis Kelas</th>
+                  <th className="py-3.5 px-4 text-center">Pertemuan Ke</th>
+                  <th className="py-3.5 px-4 text-center">Status Sesi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {attendances.map((att) => (
                   <tr key={att.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="px-6 py-4">
-                      <p className="font-extrabold text-slate-900 text-sm">{att.student_name}</p>
-                      <span className="inline-block mt-0.5 text-[11px] font-extrabold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                        {att.program_name || "Cermat Matematika"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-extrabold text-slate-800 text-xs bg-slate-100 px-2.5 py-1 rounded-lg">
-                        {att.program_name} – Pertemuan #{att.session_number || 1}
-                        <span className="text-slate-400 font-semibold">/{att.package_total || 8}</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-800">{formatDate(att.date)}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {formatTime(att.start_time)} - {formatTime(att.end_time)} WIB
+                    <td className="py-3.5 px-4">
+                      <p className="font-extrabold text-slate-900">{formatDate(att.date)}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        {formatTime(att.start_time)} - {formatTime(att.end_time)}
                       </p>
                     </td>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-slate-800">{att.tutor_name}</p>
-                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        {att.unit_name || "Unit Riscon Rancaekek"}
-                      </p>
+
+                    <td className="py-3.5 px-4">
+                      <p className="font-extrabold text-slate-800">{att.student_name}</p>
+                      <p className="text-[10px] text-slate-400">{att.class_grade}</p>
                     </td>
-                    <td className="px-6 py-4">{getStatusBadge(att.status)}</td>
-                    <td className="px-6 py-4 max-w-xs">
-                      {att.topic ? (
-                        <div>
-                          <p className="font-bold text-slate-800">{att.topic}</p>
-                          <p className="text-[11px] text-slate-500 truncate">{att.targets_achieved}</p>
-                          {att.score && (
-                            <span className="inline-block mt-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
-                              Nilai: {att.score}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">Tidak ada catatan</span>
-                      )}
+
+                    <td className="py-3.5 px-4">
+                      <p className="font-bold text-slate-800">{att.tutor_name || "Tutor"}</p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <p className="font-semibold text-primary-700">{att.program_name}</p>
+                      <p className="text-[10px] text-slate-500">{att.unit_name}</p>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          att.is_home_visit
+                            ? "bg-purple-100 text-purple-800 border border-purple-200"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {att.class_type || "Semi Privat"}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="inline-block px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 font-extrabold text-xs border border-indigo-100">
+                        {att.session_number || 1} / {att.package_total || 8}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center">
+                      {getStatusBadge(att.status)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          <EmptyState
+            icon={CheckSquare}
+            title="Tidak Ada Riwayat Absensi"
+            description="Belum ada catatan kehadiran yang tersimpan."
+            actionText={role !== "parent" ? "Catat Kehadiran Baru" : undefined}
+            onAction={role !== "parent" ? handleOpenCreate : undefined}
+          />
         )}
 
         <Pagination
           currentPage={page}
           totalPages={totalPages}
-          onPageChange={setPage}
-          limit={limit}
-          onLimitChange={setLimit}
           totalItems={total}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+          }}
         />
       </div>
 
-      {/* Modal Catat Absensi (Tutor/Admin) */}
-      {role !== "parent" && (
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title="Catat Kehadiran & Jurnal Pembelajaran Sesi"
-          maxWidth="max-w-xl"
-        >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Pilih Siswa
-                </label>
-                <select
-                  value={formData.student_id}
-                  onChange={(e) => handleStudentChangeInForm(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                  required
-                >
-                  <option value="">Pilih Siswa</option>
-                  {students.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.program_name || s.class_grade})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Program Les
-                </label>
-                <select
-                  value={formData.program_name}
-                  onChange={(e) => setFormData({ ...formData, program_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                  required
-                >
-                  <option value="Cermat Matematika">Cermat Matematika</option>
-                  <option value="English BEC">English BEC</option>
-                  <option value="Mengaji & Tahfidz">Mengaji & Tahfidz</option>
-                  <option value="Pracalis Calistung">Pracalis Calistung</option>
-                </select>
-              </div>
+      {/* Modal Add Attendance & Teaching Journal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Catat Kehadiran & Jurnal Sesi"
+        subtitle="Presensi sesi bimbingan belajar dan ringkasan materi harian"
+        maxWidth="max-w-xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Pilih Siswa & Program *
+              </label>
+              <select
+                value={formData.student_id}
+                onChange={(e) => handleStudentChangeInForm(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary-500/20"
+                required
+              >
+                <option value="">-- Pilih Siswa --</option>
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.class_type || "Semi Privat"} ({s.program_name || s.class_grade})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Unit Cabang
-                </label>
-                <select
-                  value={formData.unit_name}
-                  onChange={(e) => setFormData({ ...formData, unit_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
-                >
-                  <option value="Unit Riscon Rancaekek">Unit Riscon Rancaekek</option>
-                  <option value="Unit Panorama Jatinangor">Unit Panorama Jatinangor</option>
-                  <option value="Unit Rumah Belajar Pusat">Unit Rumah Belajar Pusat</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Program Les
+              </label>
+              <select
+                value={formData.program_name}
+                onChange={(e) => setFormData({ ...formData, program_name: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+              >
+                {programs.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Pertemuan Ke-
-                </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Jenis Kelas
+              </label>
+              <select
+                value={formData.class_type}
+                onChange={(e) => {
+                  const ct = e.target.value;
+                  setFormData({
+                    ...formData,
+                    class_type: ct,
+                    is_home_visit: ct === "Privat Home Visit" ? 1 : 0
+                  });
+                }}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+              >
+                <option value="Semi Privat">Semi Privat</option>
+                <option value="Privat di Tempat Les">Privat di Tempat Les</option>
+                <option value="Online Privat">Online Privat</option>
+                <option value="Privat Home Visit">Privat Home Visit</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Unit / Lokasi
+              </label>
+              <select
+                value={formData.unit_name}
+                onChange={(e) => setFormData({ ...formData, unit_name: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+              >
+                {units.map((u) => (
+                  <option key={u.id} value={u.name}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Pertemuan X dari Y
+              </label>
+              <div className="flex items-center gap-1.5">
                 <input
                   type="number"
                   min="1"
                   max="20"
                   value={formData.session_number}
                   onChange={(e) => setFormData({ ...formData, session_number: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                  className="w-14 px-2 py-2 border border-slate-200 rounded-xl text-xs font-bold text-center"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Total Paket Bulan Ini
-                </label>
+                <span className="text-xs text-slate-400 font-bold">/</span>
                 <select
                   value={formData.package_total}
                   onChange={(e) => setFormData({ ...formData, package_total: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                  className="flex-1 px-2 py-2 border border-slate-200 rounded-xl text-xs font-bold"
                 >
-                  <option value={4}>Paket 4 Sesi/Bulan</option>
-                  <option value={8}>Paket 8 Sesi/Bulan</option>
-                  <option value={12}>Paket 12 Sesi/Bulan</option>
+                  <option value={4}>4 Sesi</option>
+                  <option value={8}>8 Sesi</option>
+                  <option value={12}>12 Sesi</option>
                 </select>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Tanggal Pertemuan
-                </label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Status Presensi
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
-                >
-                  <option value="hadir">Hadir (Sesi Terlaksana)</option>
-                  <option value="izin">Izin</option>
-                  <option value="sakit">Sakit</option>
-                  <option value="alfa">Alfa</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Waktu
-                </label>
-                <input
-                  type="text"
-                  value={`${formData.start_time} - ${formData.end_time}`}
-                  disabled
-                  className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500"
-                />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tanggal Pertemuan *
+              </label>
+              <input
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+                required
+              >
+              </input>
             </div>
 
-            {/* Integrated Journal Section */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
-              <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-primary-600" />
-                Catatan Jurnal Pembelajaran Sesi Ini
-              </span>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Status Kehadiran *
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50/50"
+              >
+                <option value="hadir">Hadir (Sesi Terlaksana)</option>
+                <option value="izin">Izin</option>
+                <option value="sakit">Sakit</option>
+                <option value="alfa">Alfa</option>
+              </select>
+            </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Waktu Sesi
+              </label>
+              <input
+                type="text"
+                value={`${formData.start_time} - ${formData.end_time} (${formData.duration_minutes}m)`}
+                disabled
+                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500"
+              />
+            </div>
+          </div>
+
+          {/* Integrated Brief Journal */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-primary-600" />
+              Catatan Jurnal Sesi (Ringkas):
+            </span>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                Materi / Topik Pembelajaran *
+              </label>
+              <input
+                type="text"
+                value={formData.topic}
+                onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                placeholder="Contoh: Operasi Pecahan / Phonics / Tahsin Surah Al-Mulk"
+                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                required={formData.status === "hadir"}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                Capaian Singkat Sesi Ini
+              </label>
+              <textarea
+                rows={2}
+                value={formData.targets_achieved}
+                onChange={(e) => setFormData({ ...formData, targets_achieved: e.target.value })}
+                placeholder="Contoh: Mampu menyelesaikan latihan dengan baik dan mandiri..."
+                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Materi / Topik Pembelajaran
+                  Tugas Rumah / PR (Jika Ada)
                 </label>
                 <input
                   type="text"
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  placeholder="Contoh: Operasi Pecahan Campuran / Tahsin Surah Al-Mulk"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                  required={formData.status === "hadir"}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Capaian & Target Tercapai
-                </label>
-                <textarea
-                  rows={2}
-                  value={formData.targets_achieved}
-                  onChange={(e) => setFormData({ ...formData, targets_achieved: e.target.value })}
-                  placeholder="Contoh: Mampu menyelesaikan 10 soal cerita KPK dengan tepat..."
+                  value={formData.homework}
+                  onChange={(e) => setFormData({ ...formData, homework: e.target.value })}
+                  placeholder="Latihan hal. 14 no 1-5 di buku fisik"
                   className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                  required={formData.status === "hadir"}
                 />
               </div>
 
-              {/* Dynamic Rubric based on program */}
-              {formData.program_name.includes("Mengaji") || formData.program_name.includes("Tahfidz") ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
-                      Kelancaran & Makhraj
-                    </label>
-                    <select
-                      value={formData.fluency_rating}
-                      onChange={(e) => setFormData({ ...formData, fluency_rating: e.target.value })}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                    >
-                      <option value="Sangat Lancar">Sangat Lancar</option>
-                      <option value="Baik / Lancar">Baik / Lancar</option>
-                      <option value="Perlu Latihan">Perlu Latihan</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
-                      Setoran Surah / Ayat
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.memorization_surah}
-                      onChange={(e) => setFormData({ ...formData, memorization_surah: e.target.value })}
-                      placeholder="Surah Al-Mulk ayat 1-5"
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
-                      Nilai Sesi (0 - 100) (Opsional)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={formData.score || ""}
-                      onChange={(e) => setFormData({ ...formData, score: e.target.value ? parseFloat(e.target.value) : null })}
-                      placeholder="85"
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
-                      Tugas Rumah / PR
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.homework}
-                      onChange={(e) => setFormData({ ...formData, homework: e.target.value })}
-                      placeholder="Modul Rumbala Hal 15"
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                    />
-                  </div>
-                </div>
-              )}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Catatan Khusus Sesi
+                </label>
+                <input
+                  type="text"
+                  value={formData.progress_notes}
+                  onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
+                  placeholder="Ananda sangat antusias belajar"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm disabled:opacity-50"
-              >
-                {isSaving ? "Menyimpan..." : "Simpan Presensi & Jurnal"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {isSaving ? "Menyimpan..." : "Simpan Presensi"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

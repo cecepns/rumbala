@@ -8,11 +8,39 @@ import Modal from "../../components/common/Modal";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { TableSkeleton } from "../../components/common/Skeleton";
 import EmptyState from "../../components/common/EmptyState";
-import { Plus, Edit2, Trash2, GraduationCap, MessageCircle, Mail } from "lucide-react";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  GraduationCap,
+  MessageCircle,
+  Mail,
+  Building2,
+  Car,
+  Layers,
+  Award,
+  DollarSign,
+  CheckCircle2
+} from "lucide-react";
 import toast from "react-hot-toast";
+
+const AVAILABLE_UNITS = [
+  "Unit Riscon Rancaekek",
+  "Unit Panorama Jatinangor",
+  "Rumah Belajar Pusat"
+];
+
+const AVAILABLE_CLASS_TYPES = [
+  "Semi Privat",
+  "Privat di Tempat Les",
+  "Online Privat",
+  "Online Semi Privat",
+  "Privat Home Visit"
+];
 
 export default function TutorList() {
   const [tutors, setTutors] = useState([]);
+  const [programsList, setProgramsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -21,21 +49,47 @@ export default function TutorList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
+  // Create/Edit Tutor Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTutor, setEditingTutor] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
-    subjects: "",
+    subjects: "Cermat Matematika",
+    units_teaching: ["Unit Riscon Rancaekek"],
+    class_types: ["Semi Privat", "Privat di Tempat Les"],
     fee_per_session: 80000,
     status: "active",
-    bio: ""
+    bio: "",
+    rates: []
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Manage Specific Rates Modal
+  const [isRateModalOpen, setIsRateModalOpen] = useState(false);
+  const [selectedTutorForRate, setSelectedTutorForRate] = useState(null);
+  const [rateForm, setRateForm] = useState({
+    program_name: "Cermat Matematika",
+    class_type: "Semi Privat",
+    duration_minutes: 90,
+    rate_per_session: 80000,
+    transport_fee: 0,
+    notes: ""
+  });
+  const [isSavingRate, setIsSavingRate] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchOptions = async () => {
+    try {
+      const pRes = await request.get(API_ENDPOINTS.PROGRAMS.LIST);
+      if (pRes.success) setProgramsList(pRes.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchTutors = useCallback(async () => {
     try {
@@ -48,7 +102,7 @@ export default function TutorList() {
       });
       if (res.success) {
         setTutors(res.data || []);
-        setTotal(res.pagination?.total || 0);
+        setTotal(res.pagination?.total || res.data?.length || 0);
         setTotalPages(res.pagination?.totalPages || 1);
       }
     } catch (err) {
@@ -57,6 +111,10 @@ export default function TutorList() {
       setLoading(false);
     }
   }, [page, limit, search, statusFilter]);
+
+  useEffect(() => {
+    fetchOptions();
+  }, []);
 
   useEffect(() => {
     fetchTutors();
@@ -68,24 +126,37 @@ export default function TutorList() {
       name: "",
       email: "",
       phone: "",
-      subjects: "",
+      subjects: "Cermat Matematika",
+      units_teaching: ["Unit Riscon Rancaekek"],
+      class_types: ["Semi Privat", "Privat di Tempat Les"],
       fee_per_session: 80000,
       status: "active",
-      bio: ""
+      bio: "",
+      rates: []
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (tutor) => {
     setEditingTutor(tutor);
+    const unitsArr = tutor.units_teaching
+      ? tutor.units_teaching.split(",").map((u) => u.trim())
+      : ["Unit Riscon Rancaekek"];
+    const classArr = tutor.class_types
+      ? tutor.class_types.split(",").map((c) => c.trim())
+      : ["Semi Privat"];
+
     setFormData({
       name: tutor.name,
       email: tutor.email || "",
       phone: tutor.phone,
-      subjects: tutor.subjects,
-      fee_per_session: tutor.fee_per_session,
-      status: tutor.status,
-      bio: tutor.bio || ""
+      subjects: tutor.subjects || "",
+      units_teaching: unitsArr,
+      class_types: classArr,
+      fee_per_session: tutor.fee_per_session || 80000,
+      status: tutor.status || "active",
+      bio: tutor.bio || "",
+      rates: tutor.rates || []
     });
     setIsModalOpen(true);
   };
@@ -94,15 +165,21 @@ export default function TutorList() {
     e.preventDefault();
     try {
       setIsSaving(true);
+      const payload = {
+        ...formData,
+        units_teaching: formData.units_teaching.join(", "),
+        class_types: formData.class_types.join(", ")
+      };
+
       if (editingTutor) {
-        const res = await request.put(API_ENDPOINTS.TUTORS.UPDATE(editingTutor.id), formData);
+        const res = await request.put(API_ENDPOINTS.TUTORS.UPDATE(editingTutor.id), payload);
         if (res.success) {
           toast.success("Data tutor berhasil diperbarui!");
           setIsModalOpen(false);
           fetchTutors();
         }
       } else {
-        const res = await request.post(API_ENDPOINTS.TUTORS.CREATE, formData);
+        const res = await request.post(API_ENDPOINTS.TUTORS.CREATE, payload);
         if (res.success) {
           toast.success("Data tutor baru berhasil ditambahkan!");
           setIsModalOpen(false);
@@ -133,15 +210,90 @@ export default function TutorList() {
     }
   };
 
+  // Unit checkbox toggle
+  const toggleUnit = (unit) => {
+    const exists = formData.units_teaching.includes(unit);
+    setFormData({
+      ...formData,
+      units_teaching: exists
+        ? formData.units_teaching.filter((u) => u !== unit)
+        : [...formData.units_teaching, unit]
+    });
+  };
+
+  // Class type checkbox toggle
+  const toggleClassType = (type) => {
+    const exists = formData.class_types.includes(type);
+    setFormData({
+      ...formData,
+      class_types: exists
+        ? formData.class_types.filter((t) => t !== type)
+        : [...formData.class_types, type]
+    });
+  };
+
+  // Manage Rates
+  const handleOpenManageRates = (tutor) => {
+    setSelectedTutorForRate(tutor);
+    setRateForm({
+      program_name: programsList[0]?.name || "Cermat Matematika",
+      class_type: "Semi Privat",
+      duration_minutes: 90,
+      rate_per_session: 80000,
+      transport_fee: 0,
+      notes: ""
+    });
+    setIsRateModalOpen(true);
+  };
+
+  const handleSaveRate = async (e) => {
+    e.preventDefault();
+    if (!selectedTutorForRate) return;
+    try {
+      setIsSavingRate(true);
+      const res = await request.post(API_ENDPOINTS.TUTORS.ADD_RATE(selectedTutorForRate.id), rateForm);
+      if (res.success) {
+        toast.success("Tarif honor per program berhasil ditambahkan!");
+        // Refresh tutor rate in state
+        const updatedRes = await request.get(API_ENDPOINTS.TUTORS.DETAIL(selectedTutorForRate.id));
+        if (updatedRes.success) setSelectedTutorForRate(updatedRes.data);
+        fetchTutors();
+      }
+    } catch (err) {
+      toast.error("Gagal menambahkan tarif honor");
+    } finally {
+      setIsSavingRate(false);
+    }
+  };
+
+  const handleDeleteRate = async (rateId) => {
+    if (!selectedTutorForRate) return;
+    try {
+      const res = await request.delete(API_ENDPOINTS.TUTORS.DELETE_RATE(selectedTutorForRate.id, rateId));
+      if (res.success) {
+        toast.success("Tarif honor berhasil dihapus.");
+        const updatedRes = await request.get(API_ENDPOINTS.TUTORS.DETAIL(selectedTutorForRate.id));
+        if (updatedRes.success) setSelectedTutorForRate(updatedRes.data);
+        fetchTutors();
+      }
+    } catch (err) {
+      toast.error("Gagal menghapus tarif");
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
-            Data Tutor Pengajar
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Kelola tutor spesialis, keahlian mata pelajaran, dan tarif honor per pertemuan.
+          <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
+            Pendidik & Edukator
+          </span>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+            Data Tutor Pengajar & Struktur Honor
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Kelola data tutor, program yang diampu, unit mengajar, jenis kelas, tarif per program, dan tambahan transport Privat Home Visit.
           </p>
         </div>
 
@@ -171,149 +323,228 @@ export default function TutorList() {
             setStatusFilter(e.target.value);
             setPage(1);
           }}
-          className="w-full sm:w-auto px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          className="w-full sm:w-auto px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20 font-semibold"
         >
           <option value="">Semua Status</option>
-          <option value="active">Aktif</option>
-          <option value="inactive">Non-Aktif</option>
+          <option value="active">Tutor Aktif</option>
+          <option value="inactive">Nonaktif</option>
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-6">
-            <TableSkeleton rows={5} cols={5} />
-          </div>
-        ) : tutors.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px]">
-                <tr>
-                  <th className="py-3.5 px-4">Nama Tutor</th>
-                  <th className="py-3.5 px-4">Kontak (WA & Email)</th>
-                  <th className="py-3.5 px-4">Keahlian Mapel</th>
-                  <th className="py-3.5 px-4">Tarif Honor / Sesi</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {tutors.map((tutor) => (
-                  <tr key={tutor.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                          {tutor.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800">{tutor.name}</p>
-                          <p className="text-[11px] text-slate-400">Tutor ID: #{tutor.id}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => {
-                          const url = createWhatsAppUrl(tutor.phone, `Halo Tutor ${tutor.name}`);
-                          window.open(url, "_blank");
-                        }}
-                        className="flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-700"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" /> {tutor.phone}
-                      </button>
-                      {tutor.email && (
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Mail className="w-3 h-3" /> {tutor.email}
+      {/* Tutor Cards Grid */}
+      {loading ? (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+          <TableSkeleton rows={4} cols={4} />
+        </div>
+      ) : tutors.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {tutors.map((tutor) => (
+            <div
+              key={tutor.id}
+              className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:border-primary-300 transition-all flex flex-col justify-between space-y-4"
+            >
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-700 text-white flex items-center justify-center font-extrabold text-lg shadow-sm">
+                      {tutor.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-extrabold text-base text-slate-900">{tutor.name}</h2>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            tutor.status === "active"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {tutor.status === "active" ? "Aktif" : "Nonaktif"}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-[11px]">
-                        {tutor.subjects}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800">
-                      {formatRupiah(tutor.fee_per_session)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          tutor.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {tutor.status === "active" ? "Aktif" : "Non-Aktif"}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditModal(tutor)}
-                          title="Edit Tutor"
-                          className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(tutor)}
-                          title="Hapus Tutor"
-                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={GraduationCap}
-            title="Tidak Ada Data Tutor"
-            description="Belum ada data tutor pengajar yang tersimpan."
-            actionText="Tambah Tutor Baru"
-            onAction={handleOpenCreateModal}
-          />
-        )}
+                      <p className="text-xs text-slate-500 mt-0.5">Tutor ID: #{tutor.id}</p>
+                    </div>
+                  </div>
 
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={total}
-          limit={limit}
-          onPageChange={setPage}
-          onLimitChange={(newLimit) => {
-            setLimit(newLimit);
-            setPage(1);
-          }}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenEditModal(tutor)}
+                      title="Edit Tutor"
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(tutor)}
+                      title="Hapus Tutor"
+                      className="p-1.5 rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Contact & Bio */}
+                <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600">
+                  <button
+                    onClick={() => {
+                      const url = createWhatsAppUrl(tutor.phone, `Halo Tutor ${tutor.name}`);
+                      window.open(url, "_blank");
+                    }}
+                    className="flex items-center gap-1.5 font-bold text-emerald-600 hover:text-emerald-700"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> {tutor.phone}
+                  </button>
+                  {tutor.email && (
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      <Mail className="w-3.5 h-3.5" /> {tutor.email}
+                    </span>
+                  )}
+                </div>
+
+                {/* Units & Class Types */}
+                <div className="mt-4 space-y-2.5 text-xs">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">
+                      Program & Keahlian:
+                    </span>
+                    <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-xs">
+                      {tutor.subjects || "Cermat Matematika"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">
+                      Unit Mengajar:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(tutor.units_teaching || "Unit Riscon Rancaekek").split(",").map((u, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <Building2 className="w-3 h-3 text-slate-400" /> {u.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400 block mb-1">
+                      Jenis Kelas yang Dapat Diajar:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(tutor.class_types || "Semi Privat").split(",").map((c, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                            c.includes("Home Visit")
+                              ? "bg-purple-100 text-purple-800 border border-purple-200"
+                              : "bg-sky-50 text-sky-700"
+                          }`}
+                        >
+                          {c.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rates Breakdown */}
+                <div className="mt-4 p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold uppercase text-slate-700 flex items-center gap-1">
+                      <Award className="w-3.5 h-3.5 text-emerald-600" />
+                      Struktur Honor Mengajar ({tutor.rates?.length || 1} Tarif)
+                    </span>
+                    <button
+                      onClick={() => handleOpenManageRates(tutor)}
+                      className="text-[11px] font-bold text-primary-600 hover:text-primary-700"
+                    >
+                      + Atur Tarif Khusus
+                    </button>
+                  </div>
+
+                  {tutor.rates && tutor.rates.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {tutor.rates.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0"
+                        >
+                          <div>
+                            <p className="font-bold text-slate-800">
+                              {r.program_name} &bull; <span className="text-slate-500">{r.class_type}</span>
+                            </p>
+                            {parseFloat(r.transport_fee) > 0 && (
+                              <p className="text-[10px] text-purple-600 font-semibold flex items-center gap-1">
+                                <Car className="w-3 h-3" /> +Transport Home Visit: {formatRupiah(r.transport_fee)}
+                              </p>
+                            )}
+                          </div>
+                          <span className="font-extrabold text-emerald-700">{formatRupiah(r.rate_per_session)}/sesi</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Tarif Standar (Default):</span>
+                      <span className="font-extrabold text-emerald-700">
+                        {formatRupiah(tutor.fee_per_session)}/sesi
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span className="text-slate-400 italic text-[11px]">
+                  {tutor.bio || "Edukator bersertifikasi Rumbala"}
+                </span>
+                <button
+                  onClick={() => handleOpenManageRates(tutor)}
+                  className="px-3 py-1.5 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold text-xs transition-colors"
+                >
+                  Kelola Tarif Honor &rarr;
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={GraduationCap}
+          title="Tidak Ada Data Tutor"
+          description="Belum ada data tutor pengajar yang tersimpan."
+          actionText="Tambah Tutor Baru"
+          onAction={handleOpenCreateModal}
         />
-      </div>
+      )}
 
-      {/* Create / Edit Tutor Modal */}
+      {/* Modal 1: Create/Edit Tutor Profile */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingTutor ? "Ubah Data Tutor" : "Tambah Tutor Pengajar Baru"}
-        subtitle="Lengkapi keahlian mata pelajaran dan tarif fee tutor"
+        subtitle="Lengkapi unit mengajar, jenis kelas, program, dan tarif dasar"
       >
         <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Nama Lengkap Tutor *
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Contoh: Sarah Azzahra, S.Pd"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-            />
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Nama Lengkap Tutor *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Contoh: Sarah Azzahra, S.Pd"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                 No. WhatsApp *
@@ -324,42 +555,98 @@ export default function TutorList() {
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 placeholder="Contoh: 081234567890"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
               />
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Email
+                Email Tutor
               </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="sarah.tutor@rumbala.com"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Keahlian Mata Pelajaran / Program *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.subjects}
+                onChange={(e) => setFormData({ ...formData, subjects: e.target.value })}
+                placeholder="Contoh: Cermat Matematika, English BEC"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
               />
             </div>
           </div>
 
+          {/* Unit Mengajar Checkboxes */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Keahlian Mata Pelajaran *
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+              Pilihan Unit Cabang Mengajar *
             </label>
-            <input
-              type="text"
-              required
-              value={formData.subjects}
-              onChange={(e) => setFormData({ ...formData, subjects: e.target.value })}
-              placeholder="Contoh: Matematika, IPA SD & SMP"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {AVAILABLE_UNITS.map((unit) => (
+                <label
+                  key={unit}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                    formData.units_teaching.includes(unit)
+                      ? "bg-primary-50 border-primary-300 text-primary-900"
+                      : "bg-slate-50 border-slate-200 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.units_teaching.includes(unit)}
+                    onChange={() => toggleUnit(unit)}
+                    className="rounded text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>{unit}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Class Types Checkboxes */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+              Pilihan Jenis Kelas yang Dapat Diajar *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {AVAILABLE_CLASS_TYPES.map((type) => (
+                <label
+                  key={type}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                    formData.class_types.includes(type)
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-900"
+                      : "bg-slate-50 border-slate-200 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.class_types.includes(type)}
+                    onChange={() => toggleClassType(type)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>{type}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Tarif Honor / Sesi (Rp) *
+                Tarif Honor Dasar / Sesi (Rp) *
               </label>
               <input
                 type="number"
@@ -368,7 +655,7 @@ export default function TutorList() {
                 step="5000"
                 value={formData.fee_per_session}
                 onChange={(e) => setFormData({ ...formData, fee_per_session: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"
               />
             </div>
 
@@ -379,24 +666,24 @@ export default function TutorList() {
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
               >
-                <option value="active">Aktif</option>
-                <option value="inactive">Non-Aktif</option>
+                <option value="active">Aktif Mengajar</option>
+                <option value="inactive">Nonaktif</option>
               </select>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Bio Singkat & Pengalaman
+              Biografi Singkat & Pengalaman Mengajar
             </label>
             <textarea
               rows={2}
               value={formData.bio}
               onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              placeholder="Pengalaman mengajar atau latar belakang pendidikan..."
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+              placeholder="Latar belakang pendidikan, spesialisasi, atau sertifikasi..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
           </div>
 
@@ -419,12 +706,183 @@ export default function TutorList() {
         </form>
       </Modal>
 
+      {/* Modal 2: Manage Rates & Transport per Program */}
+      <Modal
+        isOpen={isRateModalOpen}
+        onClose={() => setIsRateModalOpen(false)}
+        title={`Atur Tarif Honor: ${selectedTutorForRate?.name}`}
+        subtitle="Konfigurasi honor berbeda berdasarkan program, jenis kelas, dan tambahan transport Home Visit"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-5">
+          {/* List Existing Rates */}
+          <div className="space-y-2">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+              Daftar Tarif Honor Terdaftar:
+            </h3>
+
+            {selectedTutorForRate?.rates && selectedTutorForRate.rates.length > 0 ? (
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                {selectedTutorForRate.rates.map((r) => (
+                  <div key={r.id} className="p-3 flex items-center justify-between text-xs bg-white hover:bg-slate-50">
+                    <div>
+                      <p className="font-extrabold text-slate-900">
+                        {r.program_name} &bull; <span className="text-primary-700">{r.class_type}</span> ({r.duration_minutes || 90}m)
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Fee Mengajar: <strong>{formatRupiah(r.rate_per_session)}</strong>
+                        {parseFloat(r.transport_fee) > 0 && (
+                          <span className="text-purple-700 font-bold ml-2">
+                            + Transport: {formatRupiah(r.transport_fee)}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="font-extrabold text-emerald-700">
+                        Total: {formatRupiah(parseFloat(r.rate_per_session) + parseFloat(r.transport_fee || 0))}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteRate(r.id)}
+                        className="p-1 text-red-500 hover:text-red-700"
+                        title="Hapus tarif ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">Belum ada tarif spesifik, masih menggunakan default.</p>
+            )}
+          </div>
+
+          {/* Add New Rate Form */}
+          <form onSubmit={handleSaveRate} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <h4 className="text-xs font-bold uppercase text-slate-800 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5 text-primary-600" />
+              Tambah Tarif Program / Jenis Kelas Baru:
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Program Bimbingan *
+                </label>
+                <select
+                  value={rateForm.program_name}
+                  onChange={(e) => setRateForm({ ...rateForm, program_name: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold"
+                >
+                  {programsList.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Jenis Kelas *
+                </label>
+                <select
+                  value={rateForm.class_type}
+                  onChange={(e) => {
+                    const ct = e.target.value;
+                    setRateForm({
+                      ...rateForm,
+                      class_type: ct,
+                      transport_fee: ct === "Privat Home Visit" ? 25000 : 0
+                    });
+                  }}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold"
+                >
+                  <option value="Semi Privat">Semi Privat</option>
+                  <option value="Privat di Tempat Les">Privat di Tempat Les</option>
+                  <option value="Online Privat">Online Privat</option>
+                  <option value="Privat Home Visit">Privat Home Visit</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Fee Mengajar / Sesi (Rp) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="5000"
+                  value={rateForm.rate_per_session}
+                  onChange={(e) => setRateForm({ ...rateForm, rate_per_session: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold text-emerald-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Uang Transport Home Visit (Rp)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5000"
+                  value={rateForm.transport_fee}
+                  onChange={(e) => setRateForm({ ...rateForm, transport_fee: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold text-purple-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Durasi Sesi (Menit)
+                </label>
+                <input
+                  type="number"
+                  min="30"
+                  max="180"
+                  step="15"
+                  value={rateForm.duration_minutes}
+                  onChange={(e) => setRateForm({ ...rateForm, duration_minutes: parseInt(e.target.value) })}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="submit"
+                disabled={isSavingRate}
+                className="px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isSavingRate ? "Menyimpan..." : "+ Tambahkan Tarif Ini"}
+              </button>
+            </div>
+          </form>
+
+          <div className="flex justify-end pt-3 border-t border-slate-100">
+            <button
+              onClick={() => setIsRateModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm Delete */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Hapus Data Tutor"
-        message={`Apakah Anda yakin ingin menghapus data tutor "${deleteTarget?.name}"?`}
+        title="Hapus Tutor"
+        message={`Apakah Anda yakin ingin menghapus tutor "${deleteTarget?.name}"?`}
         isLoading={isDeleting}
       />
     </div>

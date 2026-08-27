@@ -18,7 +18,10 @@ import {
   Calendar,
   User,
   BookOpen,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck,
+  Building2,
+  FileText
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -29,13 +32,15 @@ export default function RescheduleList() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
 
-  // Create Modal State (For Parent / Admin)
+  // Create Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [childrenOptions, setChildrenOptions] = useState([]);
   const [schedulesOptions, setSchedulesOptions] = useState([]);
   const [formData, setFormData] = useState({
     student_id: "",
-    program_name: "",
+    program_name: "Cermat Matematika",
+    unit_name: "Unit Riscon Rancaekek",
+    class_type: "Semi Privat",
     schedule_id: "",
     original_date: new Date().toISOString().split("T")[0],
     reason: "izin",
@@ -45,10 +50,14 @@ export default function RescheduleList() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Status Action Modal (For Admin)
+  // Status Action Modal (For Admin Administrative Decision)
   const [selectedReq, setSelectedReq] = useState(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-  const [statusForm, setStatusForm] = useState({ status: "approved", admin_notes: "" });
+  const [statusForm, setStatusForm] = useState({
+    status: "approved",
+    session_decision: "valid",
+    admin_notes: ""
+  });
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const fetchRequests = useCallback(async () => {
@@ -86,6 +95,8 @@ export default function RescheduleList() {
               ...prev,
               student_id: selectedChildId || res.data[0].id,
               program_name: res.data[0].programs?.[0]?.program_name || "Cermat Matematika",
+              unit_name: res.data[0].programs?.[0]?.unit_name || "Unit Riscon Rancaekek",
+              class_type: res.data[0].programs?.[0]?.class_type || "Semi Privat"
             }));
           }
         }
@@ -112,10 +123,12 @@ export default function RescheduleList() {
   const handleOpenCreate = () => {
     const sId = selectedChildId || childrenOptions[0]?.id || "";
     const activeChild = childrenOptions.find((c) => c.id === Number(sId));
-    const prog = activeChild?.programs?.[0]?.program_name || "Cermat Matematika";
+    const prog = activeChild?.programs?.[0] || activeChild;
     setFormData({
       student_id: sId,
-      program_name: prog,
+      program_name: prog?.program_name || "Cermat Matematika",
+      unit_name: prog?.unit_name || "Unit Riscon Rancaekek",
+      class_type: prog?.class_type || "Semi Privat",
       schedule_id: "",
       original_date: new Date().toISOString().split("T")[0],
       reason: "izin",
@@ -128,7 +141,7 @@ export default function RescheduleList() {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.student_id || !formData.program_name || !formData.original_date || !formData.reason_details) {
+    if (!formData.student_id || !formData.original_date || !formData.reason_details) {
       toast.error("Harap lengkapi semua data permohonan.");
       return;
     }
@@ -140,11 +153,9 @@ export default function RescheduleList() {
         toast.success(res.message || "Permohonan berhasil dikirim!");
         setIsCreateOpen(false);
         fetchRequests();
-      } else {
-        toast.error(res.message || "Gagal mengajukan izin");
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Terjadi kesalahan.");
+      toast.error(err.response?.data?.message || "Gagal mengirim permohonan");
     } finally {
       setIsSubmitting(false);
     }
@@ -154,210 +165,185 @@ export default function RescheduleList() {
     setSelectedReq(reqItem);
     setStatusForm({
       status: reqItem.status === "pending" ? "approved" : reqItem.status,
-      admin_notes: reqItem.admin_notes || "",
+      session_decision: reqItem.session_decision || (reqItem.reason === "sakit" ? "valid" : "valid"),
+      admin_notes: reqItem.admin_notes || (reqItem.reason === "sakit" ? "Izin sakit diterima, sesi dapat dijadwalkan ulang." : "Disetujui untuk jadwal pengganti.")
     });
     setIsStatusModalOpen(true);
   };
 
-  const handleUpdateStatusSubmit = async (e) => {
+  const handleStatusSubmit = async (e) => {
     e.preventDefault();
     if (!selectedReq) return;
+
     try {
       setIsUpdatingStatus(true);
       const res = await request.put(API_ENDPOINTS.RESCHEDULE.UPDATE_STATUS(selectedReq.id), statusForm);
       if (res.success) {
-        toast.success(res.message || "Status berhasil diperbarui.");
+        toast.success("Keputusan administratif permohonan berhasil disimpan!");
         setIsStatusModalOpen(false);
         fetchRequests();
       }
     } catch (err) {
-      toast.error("Gagal memperbarui status.");
+      toast.error("Gagal memperbarui status permohonan");
     } finally {
       setIsUpdatingStatus(false);
     }
   };
 
-  const getStatusBadge = (st) => {
-    switch (st) {
-      case "approved":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            Disetujui Admin
+  const getStatusBadge = (st, decision) => {
+    if (st === "approved") {
+      return (
+        <div className="space-y-0.5">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+            <CheckCircle2 className="w-3 h-3" /> Disetujui Admin
           </span>
-        );
-      case "rejected":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-            Ditolak
-          </span>
-        );
-      case "pending":
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
-            Menunggu Verifikasi Admin
-          </span>
-        );
+          <p className="text-[10px] font-semibold text-emerald-700">
+            {decision === "forfeited" ? "⚠️ Sesi Hangus" : "✓ Sesi Berlaku / Reschedule"}
+          </p>
+        </div>
+      );
+    } else if (st === "rejected") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+          <XCircle className="w-3 h-3" /> Ditolak
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
+        <Clock className="w-3 h-3" /> Menunggu Keputusan Admin
+      </span>
+    );
   };
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
-            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Lembaga"}
+            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Keputusan Administratif"}
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            Izin & Reschedule Jadwal Les
+            Izin & Reschedule Sesi Les
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {role === "parent"
-              ? "Ajukan permohonan izin belajar atau jadwal pengganti untuk ananda tercinta."
-              : role === "tutor"
-              ? "Pantau status pengajuan izin dan jadwal pengganti dari siswa bimbingan Anda."
-              : "Verifikasi dan kelola persetujuan izin serta jadwal pengganti siswa."}
+            Alur: Orang Tua mengajukan &rarr; Admin memproses keputusan administratif &rarr; Tutor menerima informasi jadwal pengganti.
           </p>
         </div>
 
-        {role === "parent" && (
-          <button
-            onClick={handleOpenCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-primary-500/30 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Ajukan Izin / Reschedule
-          </button>
-        )}
+        <button
+          onClick={handleOpenCreate}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          Ajukan Izin / Reschedule
+        </button>
       </div>
 
       {/* Parent Filter Bar */}
       {role === "parent" && <ParentFilterBar />}
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <button
-          onClick={() => setStatusFilter("")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-            statusFilter === ""
-              ? "bg-slate-900 text-white"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
-        >
-          Semua Pengajuan
-        </button>
-        <button
-          onClick={() => setStatusFilter("pending")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-            statusFilter === "pending"
-              ? "bg-amber-600 text-white"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
-        >
-          Menunggu Verifikasi
-        </button>
-        <button
-          onClick={() => setStatusFilter("approved")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-            statusFilter === "approved"
-              ? "bg-emerald-600 text-white"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
-        >
-          Disetujui
-        </button>
-        <button
-          onClick={() => setStatusFilter("rejected")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-            statusFilter === "rejected"
-              ? "bg-rose-600 text-white"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
-        >
-          Ditolak
-        </button>
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-500">Status:</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+          >
+            <option value="">Semua Status</option>
+            <option value="pending">Menunggu Persetujuan</option>
+            <option value="approved">Disetujui</option>
+            <option value="rejected">Ditolak</option>
+          </select>
+        </div>
+
+        <div className="text-xs text-slate-400 font-semibold">
+          Total: <strong className="text-slate-800">{requests.length}</strong> Pengajuan
+        </div>
       </div>
 
-      {/* Requests List Card */}
+      {/* Requests List */}
       {loading ? (
-        <TableSkeleton rows={4} cols={5} />
+        <TableSkeleton rows={4} cols={4} />
       ) : requests.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
-          title="Belum Ada Permohonan Izin / Reschedule"
-          description="Riwayat pengajuan izin tidak hadir atau permohonan pergantian jadwal les akan muncul di sini."
-          actionText={role === "parent" ? "Ajukan Izin Sekarang" : undefined}
-          onAction={role === "parent" ? handleOpenCreate : undefined}
+          title="Tidak Ada Pengajuan Izin"
+          description="Belum ada riwayat permohonan izin atau reschedule jadwal les."
+          actionText="Ajukan Izin / Reschedule"
+          onAction={handleOpenCreate}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {requests.map((item) => (
+          {requests.map((r) => (
             <div
-              key={item.id}
-              className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4"
+              key={r.id}
+              className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-primary-300 transition-all flex flex-col justify-between space-y-4"
             >
               <div>
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center font-bold text-xs">
-                      {item.student_name?.charAt(0) || "S"}
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-primary-50 text-primary-700">
+                      {r.program_name}
                     </span>
-                    <div>
-                      <h4 className="font-extrabold text-sm text-slate-900">{item.student_name}</h4>
-                      <p className="text-[11px] font-semibold text-primary-600">{item.program_name}</p>
-                    </div>
+                    <h2 className="text-sm font-extrabold text-slate-900 mt-1">{r.student_name}</h2>
+                    <p className="text-xs text-slate-500">Wali: {r.parent_name || "Orang Tua"}</p>
                   </div>
-                  <div>{getStatusBadge(item.status)}</div>
+
+                  <div className="text-right">
+                    {getStatusBadge(r.status, r.session_decision)}
+                  </div>
                 </div>
 
-                <div className="mt-3 space-y-2 text-xs">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="font-semibold">Jadwal Asal:</span>
-                    <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
-                      {formatDate(item.original_date)}
-                    </span>
+                {/* Reason & Details */}
+                <div className="mt-3 space-y-2 text-xs text-slate-700">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="capitalize text-slate-800 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        Alasan: {r.reason === "sakit" ? "Sakit (Pengecualian Medis)" : r.reason || "Izin"}
+                      </span>
+                      <span className="text-slate-400 font-normal">
+                        Jadwal Awal: <strong>{formatDate(r.original_date)}</strong>
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 italic leading-relaxed">"{r.reason_details}"</p>
                   </div>
 
-                  {item.requested_new_date && (
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="font-semibold">Permintaan Pengganti:</span>
-                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                        {formatDate(item.requested_new_date)} ({item.requested_new_time || "Sore"})
+                  {/* Requested Replacement */}
+                  {r.requested_new_date && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 text-indigo-900 text-xs font-semibold">
+                      <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>
+                        Usulan Jadwal Pengganti: <strong>{formatDate(r.requested_new_date)}</strong> ({r.requested_new_time || "Sore"})
                       </span>
                     </div>
                   )}
 
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 mt-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">
-                      Alasan ({item.reason}):
-                    </p>
-                    <p className="text-xs font-medium text-slate-800 mt-0.5 italic">
-                      "{item.reason_details}"
-                    </p>
-                  </div>
-
-                  {item.admin_notes && (
-                    <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 text-indigo-900 text-xs">
-                      <span className="font-bold">Catatan Admin:</span> {item.admin_notes}
+                  {/* Admin Notes / Decision */}
+                  {r.admin_notes && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-950 text-xs">
+                      <p className="text-[10px] font-bold text-emerald-800 uppercase">Catatan Keputusan Admin:</p>
+                      <p className="mt-0.5 font-medium">{r.admin_notes}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Admin Action */}
+              {/* Action Button for Admin */}
               {role === "admin" && (
-                <div className="pt-2 border-t border-slate-100 flex justify-end">
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">ID Pengajuan: #{r.id}</span>
                   <button
-                    onClick={() => handleOpenStatusModal(item)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-colors cursor-pointer"
+                    onClick={() => handleOpenStatusModal(r)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold transition-colors cursor-pointer"
                   >
-                    Verifikasi Status
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Proses Keputusan Admin
                   </button>
                 </div>
               )}
@@ -366,31 +352,33 @@ export default function RescheduleList() {
         </div>
       )}
 
-      {/* Modal Ajukan Izin / Reschedule (Parent) */}
+      {/* Modal 1: Create Request */}
       <Modal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        title="Form Pengajuan Izin / Reschedule Jadwal"
-        maxWidth="max-w-lg"
+        title="Ajukan Izin / Permohonan Reschedule"
+        subtitle="Sampaikan alasan izin atau sakit dan usulan waktu pengganti"
       >
         <form onSubmit={handleCreateSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Pilih Anak
+              Pilih Siswa & Program *
             </label>
             <select
               value={formData.student_id}
               onChange={(e) => {
-                const child = childrenOptions.find((c) => c.id === Number(e.target.value));
+                const sId = e.target.value;
+                const found = childrenOptions.find((c) => c.id === parseInt(sId));
                 setFormData({
                   ...formData,
-                  student_id: e.target.value,
-                  program_name: child?.programs?.[0]?.program_name || "Cermat Matematika",
+                  student_id: sId,
+                  program_name: found?.programs?.[0]?.program_name || formData.program_name
                 });
               }}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
               required
             >
+              <option value="">-- Pilih Siswa --</option>
               {childrenOptions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.class_grade})
@@ -399,176 +387,179 @@ export default function RescheduleList() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Program Les yang Diikuti
-            </label>
-            <select
-              value={formData.program_name}
-              onChange={(e) => setFormData({ ...formData, program_name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-              required
-            >
-              {(() => {
-                const child = childrenOptions.find((c) => c.id === Number(formData.student_id));
-                const progs = child?.programs || [
-                  { id: 1, program_name: "Cermat Matematika" },
-                  { id: 2, program_name: "English BEC" },
-                  { id: 3, program_name: "Mengaji & Tahfidz" },
-                ];
-                return progs.map((p) => (
-                  <option key={p.id || p.program_name} value={p.program_name}>
-                    {p.program_name}
-                  </option>
-                ));
-              })()}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Tanggal Berhalangan
-              </label>
-              <input
-                type="date"
-                value={formData.original_date}
-                onChange={(e) => setFormData({ ...formData, original_date: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Kategori Alasan
+                Kategori Alasan *
               </label>
               <select
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
               >
-                <option value="izin">Izin (Kegiatan Lain)</option>
-                <option value="sakit">Sakit</option>
-                <option value="acara_keluarga">Acara Keluarga</option>
+                <option value="izin">Izin Acara / Keperluan</option>
+                <option value="sakit">Sakit (Pengecualian Medis)</option>
+                <option value="acara_keluarga">Acara Keluarga / Liburan</option>
                 <option value="lainnya">Lainnya</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tanggal Sesi Awal *
+              </label>
+              <input
+                type="date"
+                required
+                value={formData.original_date}
+                onChange={(e) => setFormData({ ...formData, original_date: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Rincian Alasan
+              Detail Alasan Izin *
             </label>
             <textarea
               rows={2}
+              required
               value={formData.reason_details}
               onChange={(e) => setFormData({ ...formData, reason_details: e.target.value })}
-              placeholder="Contoh: Mengikuti acara field trip sekolah / Kurang enak badan..."
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-              required
+              placeholder="Contoh: Ananda sedang demam / ada kegiatan wisuda keluarga..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
           </div>
 
-          <div className="p-3 bg-sky-50/70 border border-sky-100 rounded-xl space-y-2.5">
-            <p className="text-xs font-bold text-sky-900 uppercase">
-              Permintaan Jadwal Pengganti (Reschedule)
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <span className="text-xs font-extrabold uppercase text-slate-800 block">
+              Usulan Jadwal Pengganti (Opsional):
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
                   Tanggal Pengganti
                 </label>
                 <input
                   type="date"
                   value={formData.requested_new_date}
                   onChange={(e) => setFormData({ ...formData, requested_new_date: e.target.value })}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800"
                 />
               </div>
+
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
-                  Jam / Sesi yang Diinginkan
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Pilihan Jam Pengganti
                 </label>
                 <input
                   type="text"
                   value={formData.requested_new_time}
                   onChange={(e) => setFormData({ ...formData, requested_new_time: e.target.value })}
-                  placeholder="15.30 - 17.00 WIB"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  placeholder="Contoh: 15:30 - 17:00 WIB"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setIsCreateOpen(false)}
-              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
             >
-              {isSubmitting ? "Mengirim..." : "Kirim Permohonan"}
+              {isSubmitting ? "Mengirim..." : "Kirim Pengajuan"}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Modal Status Verification (Admin) */}
+      {/* Modal 2: Admin Status & Decision Modal */}
       <Modal
         isOpen={isStatusModalOpen}
         onClose={() => setIsStatusModalOpen(false)}
-        title="Verifikasi Permohonan Izin / Reschedule"
+        title="Keputusan Administratif Admin"
+        subtitle={`Pengajuan: ${selectedReq?.student_name} (${selectedReq?.program_name})`}
       >
-        <form onSubmit={handleUpdateStatusSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Pilih Keputusan Status
-            </label>
-            <select
-              value={statusForm.status}
-              onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold"
-            >
-              <option value="approved">Disetujui (Approved)</option>
-              <option value="rejected">Ditolak (Rejected)</option>
-              <option value="pending">Menunggu (Pending)</option>
-            </select>
+        <form onSubmit={handleStatusSubmit} className="space-y-4">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
+            <p><strong>Alasan:</strong> {selectedReq?.reason} &bull; <em>"{selectedReq?.reason_details}"</em></p>
+            <p><strong>Jadwal Awal:</strong> {formatDate(selectedReq?.original_date)}</p>
+            {selectedReq?.requested_new_date && (
+              <p className="text-primary-700 font-semibold">
+                <strong>Usulan Pengganti:</strong> {formatDate(selectedReq.requested_new_date)} ({selectedReq.requested_new_time})
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Keputusan Status Pengajuan *
+              </label>
+              <select
+                value={statusForm.status}
+                onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              >
+                <option value="approved">Disetujui (Approved)</option>
+                <option value="rejected">Ditolak (Rejected)</option>
+                <option value="pending">Tetap Menunggu (Pending)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Ketentuan Sesi Pembelajaran *
+              </label>
+              <select
+                value={statusForm.session_decision}
+                onChange={(e) => setStatusForm({ ...statusForm, session_decision: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
+              >
+                <option value="valid">Sesi Tetap Berlaku / Reschedule Pengganti</option>
+                <option value="forfeited">Sesi Hangus (Dihitung Terpakai)</option>
+              </select>
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Catatan Admin untuk Orang Tua / Tutor
+              Catatan Administratif untuk Orang Tua & Tutor
             </label>
             <textarea
               rows={3}
               value={statusForm.admin_notes}
               onChange={(e) => setStatusForm({ ...statusForm, admin_notes: e.target.value })}
-              placeholder="Contoh: Disetujui, jadwal pengganti telah dikonfirmasi ke Tutor Sarah pada Kamis 27 Agustus 2026."
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+              placeholder="Contoh: Disetujui, jadwal pengganti dilaksanakan pada hari Sabtu pukul 16:00..."
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setIsStatusModalOpen(false)}
-              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isUpdatingStatus}
-              className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl disabled:opacity-50"
+              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
             >
-              {isUpdatingStatus ? "Menyimpan..." : "Simpan Keputusan"}
+              {isUpdatingStatus ? "Menyimpan..." : "Simpan Keputusan Admin"}
             </button>
           </div>
         </form>
