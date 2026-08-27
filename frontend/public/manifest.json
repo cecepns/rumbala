@@ -1,15 +1,37 @@
 {
-  "short_name": "Rumbala",
-  "name": "Rumbala - Bimbel & Les Privat",
+  "short_name": "rumbala",
+  "name": "rumbala - Bimbingan Belajar & Les Privat",
+  "description": "Sistem Manajemen Bimbingan Belajar & Les Privat Terpadu",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/pwa-192x192.png",
       "type": "image/png",
-      "sizes": "192x192 512x512"
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     }
   ],
   "start_url": "/",
-  "background_color": "#ffffff",
+  "scope": "/",
+  "background_color": "#0f172a",
   "theme_color": "#0284c7",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait"
 }

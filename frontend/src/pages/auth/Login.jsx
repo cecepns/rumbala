@@ -39,13 +39,15 @@ export default function Login() {
       <div className="absolute top-0 -left-40 w-96 h-96 bg-primary-500/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center z-10">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center z-10 px-6">
         <div className="inline-flex p-3 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl mb-4">
           <img src="/logo.png" alt="Rumbala Logo" className="h-16 w-auto object-contain drop-shadow-md" />
         </div>
         <h2 className="text-3xl font-extrabold text-white tracking-tight">RUMBALA</h2>
-        <p className="mt-1 text-sm text-sky-200">
-          Sistem Manajemen Bimbingan Belajar & Les Privat Terpadu
+        <p className="mt-2 text-sm text-sky-200 leading-relaxed max-w-xs mx-auto">
+          Sistem Manajemen Bimbingan Belajar
+          <br />
+          &amp; Les Privat Terpadu
         </p>
       </div>
 
