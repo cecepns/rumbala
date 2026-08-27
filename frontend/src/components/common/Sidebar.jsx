@@ -10,10 +10,12 @@ import {
   BookOpenCheck,
   Sparkles,
   TrendingUp,
-  FileText,
   Receipt,
   CircleDollarSign,
   Award,
+  CalendarClock,
+  UserCheck,
+  User,
   X
 } from "lucide-react";
 
@@ -21,22 +23,51 @@ export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const role = user?.role || "parent";
 
-  const navigation = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "tutor", "parent"] },
-    { name: "Data Siswa", href: "/students", icon: Users, roles: ["admin", "tutor"] },
-    { name: "Data Tutor", href: "/tutors", icon: GraduationCap, roles: ["admin"] },
-    { name: "Jadwal Les", href: "/schedules", icon: CalendarDays, roles: ["admin", "tutor", "parent"] },
-    { name: "Absensi", href: "/attendance", icon: CheckSquare, roles: ["admin", "tutor", "parent"] },
-    { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck, roles: ["admin", "tutor", "parent"] },
-    { name: "Generate Laporan AI", href: "/ai-reports", icon: Sparkles, roles: ["admin", "tutor", "parent"], badge: "AI" },
-    { name: "Progress Belajar", href: "/progress", icon: TrendingUp, roles: ["admin", "tutor", "parent"] },
-    { name: "Worksheet & Modul", href: "/worksheets", icon: FileText, roles: ["admin", "tutor", "parent"] },
-    { name: "Invoice & Tagihan", href: "/invoices", icon: Receipt, roles: ["admin", "parent"], badge: "4/8/12" },
-    { name: "Rekap Keuangan", href: "/finances", icon: CircleDollarSign, roles: ["admin"] },
-    { name: "Rekap Honor Tutor", href: "/tutor-recaps", icon: Award, roles: ["admin", "tutor"] },
-  ];
+  // Role-specific navigation definitions
+  let navigation = [];
 
-  const filteredNavigation = navigation.filter((item) => item.roles.includes(role));
+  if (role === "parent") {
+    navigation = [
+      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Jadwal Les", href: "/schedules", icon: CalendarDays },
+      { name: "Riwayat Kehadiran", href: "/attendance", icon: CheckSquare },
+      { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock, badge: "Baru" },
+      { name: "Jurnal Belajar", href: "/journals", icon: BookOpenCheck },
+      { name: "Progress & Capaian", href: "/progress", icon: TrendingUp },
+      { name: "Laporan Perkembangan", href: "/ai-reports", icon: Sparkles, badge: "Rapor" },
+      { name: "Invoice & Tagihan", href: "/invoices", icon: Receipt, badge: "SPP" },
+      { name: "Profil Anak", href: "/child-profile", icon: User },
+    ];
+  } else if (role === "tutor") {
+    navigation = [
+      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Jadwal Mengajar", href: "/schedules", icon: CalendarDays },
+      { name: "Siswa Saya", href: "/students", icon: Users },
+      { name: "Absensi", href: "/attendance", icon: CheckSquare },
+      { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock },
+      { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck },
+      { name: "Progress Belajar", href: "/progress", icon: TrendingUp },
+      { name: "Generate Laporan AI", href: "/ai-reports", icon: Sparkles, badge: "AI" },
+      { name: "Rekap Mengajar & Honor", href: "/tutor-recaps", icon: Award },
+      { name: "Profil Tutor", href: "/tutor-profile", icon: UserCheck },
+    ];
+  } else {
+    // Admin navigation
+    navigation = [
+      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { name: "Data Siswa", href: "/students", icon: Users },
+      { name: "Data Tutor", href: "/tutors", icon: GraduationCap },
+      { name: "Jadwal Les", href: "/schedules", icon: CalendarDays },
+      { name: "Absensi", href: "/attendance", icon: CheckSquare },
+      { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock },
+      { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck },
+      { name: "Progress Belajar", href: "/progress", icon: TrendingUp },
+      { name: "Laporan AI Siswa", href: "/ai-reports", icon: Sparkles, badge: "AI" },
+      { name: "Invoice & SPP", href: "/invoices", icon: Receipt },
+      { name: "Rekap Keuangan", href: "/finances", icon: CircleDollarSign },
+      { name: "Rekap Honor Tutor", href: "/tutor-recaps", icon: Award },
+    ];
+  }
 
   return (
     <>
@@ -71,14 +102,16 @@ export default function Sidebar({ isOpen, onClose }) {
 
         {/* User Info Capsule */}
         <div className="px-4 py-3 m-3 bg-gradient-to-r from-sky-50 to-indigo-50/70 border border-sky-100/80 rounded-xl">
-          <p className="text-xs text-sky-700 font-semibold uppercase tracking-wider">Akses Portal</p>
-          <p className="text-sm font-bold text-slate-800 truncate">{user?.name || "Pengguna"}</p>
-          <p className="text-xs text-slate-500 capitalize">{role === "parent" ? "Orang Tua / Siswa" : role}</p>
+          <p className="text-[10px] text-sky-700 font-bold uppercase tracking-wider">Akses Portal</p>
+          <p className="text-sm font-extrabold text-slate-800 truncate">{user?.name || "Pengguna"}</p>
+          <p className="text-xs text-slate-500 font-medium capitalize">
+            {role === "parent" ? "Orang Tua / Wali" : role === "tutor" ? "Tutor Pengajar" : "Administrator"}
+          </p>
         </div>
 
         {/* Navigation Links */}
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {filteredNavigation.map((item) => {
+          {navigation.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -88,7 +121,7 @@ export default function Sidebar({ isOpen, onClose }) {
                   if (window.innerWidth < 1024) onClose();
                 }}
                 className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 ${
                     isActive
                       ? "bg-primary-600 text-white shadow-sm shadow-primary-500/30"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -103,10 +136,10 @@ export default function Sidebar({ isOpen, onClose }) {
                     </div>
                     {item.badge && (
                       <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                           isActive
                             ? "bg-white/20 text-white"
-                            : item.badge === "AI"
+                            : item.badge === "AI" || item.badge === "Rapor"
                             ? "bg-purple-100 text-purple-700"
                             : "bg-amber-100 text-amber-700"
                         }`}
@@ -123,8 +156,8 @@ export default function Sidebar({ isOpen, onClose }) {
 
         {/* Footer info */}
         <div className="p-4 border-t border-slate-100 text-center">
-          <p className="text-[11px] text-slate-400 font-medium">Rumbala EdTech v1.0.0</p>
-          <p className="text-[10px] text-slate-400">© 2026 Lembaga Belajar Rumbala</p>
+          <p className="text-[11px] text-slate-400 font-bold">Rumbala EdTech 2026</p>
+          <p className="text-[10px] text-slate-400">Rumah Belajar Alfatih</p>
         </div>
       </aside>
     </>

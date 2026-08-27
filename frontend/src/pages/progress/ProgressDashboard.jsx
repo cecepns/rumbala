@@ -1,276 +1,342 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useParentPortal } from "../../context/ParentPortalContext";
 import { request } from "../../utils/request";
 import { API_ENDPOINTS } from "../../utils/endpoints";
 import { formatDate } from "../../utils/helpers";
+import ParentFilterBar from "../../components/common/ParentFilterBar";
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar
-} from "recharts";
-import { TrendingUp, Award, CheckCircle2, BookOpen, User, Calendar } from "lucide-react";
+  TrendingUp,
+  Award,
+  BookOpen,
+  Calendar,
+  CheckCircle,
+  Sparkles,
+  BarChart3,
+  Target,
+  Clock,
+  User,
+  Layers,
+  FileCheck2
+} from "lucide-react";
 import toast from "react-hot-toast";
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"];
-
 export default function ProgressDashboard() {
-  const { user, role } = useAuth();
+  const { role, user } = useAuth();
+  const { selectedChildId, selectedProgram, selectedChild } = useParentPortal();
   const [students, setStudents] = useState([]);
-  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [tutorStudentId, setTutorStudentId] = useState("");
   const [progressData, setProgressData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchStudents();
-  }, []);
+  // Filters for Tutor / Admin
+  const [selectedProgramFilter, setSelectedProgramFilter] = useState("Semua Program");
+  const [selectedPeriod, setSelectedPeriod] = useState("Agustus 2026");
 
   const fetchStudents = async () => {
     try {
-      const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
-      if (res.success && res.data?.length > 0) {
-        setStudents(res.data);
-        const initialId = role === "parent" && user?.student_id ? user.student_id : res.data[0].id;
-        setSelectedStudentId(initialId);
-        fetchProgress(initialId);
+      if (role === "tutor") {
+        const res = await request.get(API_ENDPOINTS.TUTOR_STUDENTS.LIST);
+        if (res.success && res.data) {
+          setStudents(res.data);
+          if (res.data.length > 0) setTutorStudentId(res.data[0].id);
+        }
+      } else if (role === "admin") {
+        const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
+        if (res.success && res.data) {
+          setStudents(res.data);
+          if (res.data.length > 0) setTutorStudentId(res.data[0].id);
+        }
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  const fetchProgress = async (studentId) => {
+  const fetchProgress = useCallback(async () => {
+    const sId = role === "parent" ? (selectedChildId || 1) : tutorStudentId;
+    if (!sId) return;
+
     try {
       setLoading(true);
-      const res = await request.get(API_ENDPOINTS.PROGRESS.DETAIL(studentId));
+      const progParam = role === "parent" ? selectedProgram : selectedProgramFilter;
+      const res = await request.get(API_ENDPOINTS.PROGRESS.DETAIL(sId), {
+        program_name: progParam && progParam !== "Semua Program" ? progParam : undefined
+      });
       if (res.success) {
         setProgressData(res.data);
       }
     } catch (err) {
-      toast.error("Gagal memuat progress belajar");
+      console.error(err);
+      toast.error("Gagal memuat data progress belajar");
     } finally {
       setLoading(false);
     }
-  };
+  }, [role, selectedChildId, selectedProgram, tutorStudentId, selectedProgramFilter]);
 
-  const handleStudentChange = (e) => {
-    const sId = e.target.value;
-    setSelectedStudentId(sId);
-    fetchProgress(sId);
-  };
+  useEffect(() => {
+    if (role !== "parent") {
+      fetchStudents();
+    }
+  }, [role]);
 
-  const pieData = progressData?.attendanceStats
-    ? [
-        { name: "Hadir", value: progressData.attendanceStats.hadir },
-        { name: "Izin", value: progressData.attendanceStats.izin },
-        { name: "Sakit", value: progressData.attendanceStats.sakit },
-        { name: "Alfa", value: progressData.attendanceStats.alfa }
-      ].filter((item) => item.value > 0)
-    : [];
+  useEffect(() => {
+    fetchProgress();
+  }, [fetchProgress]);
+
+  const student = progressData?.student || selectedChild;
+  const programs = progressData?.programs || [];
+  const journals = progressData?.journals || [];
 
   return (
     <div className="space-y-6">
-      {/* Header & Student Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-primary-600" />
-            Progress & Capaian Akademik Siswa
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Visualisasi grafik nilai, rasio absensi, dan capaian target pembelajaran.
-          </p>
-        </div>
-
-        {role !== "parent" && students.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-600">Pilih Siswa:</span>
-            <select
-              value={selectedStudentId}
-              onChange={handleStudentChange}
-              className="px-3.5 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-            >
-              {students.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.class_grade})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+      {/* Header */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
+          {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Capaian"}
+        </span>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+          Progress & Capaian Belajar Siswa
+        </h1>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Pantau grafik kehadiran, catatan materi sesi bimbingan, evaluasi berkala tengah & akhir periode, serta target capaian belajar.
+        </p>
       </div>
 
-      {loading ? (
-        <div className="p-12 text-center text-xs text-slate-400">Memuat visualisasi progress...</div>
-      ) : progressData ? (
-        <div className="space-y-6">
-          {/* Top Summary Banner */}
-          <div className="p-6 rounded-3xl bg-gradient-to-r from-sky-600 to-indigo-600 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-sky-200">Profil Pembelajar</span>
-              <h3 className="text-2xl font-extrabold mt-0.5">{progressData.student.name}</h3>
-              <p className="text-xs text-sky-100 mt-1">
-                {progressData.student.class_grade} • {progressData.student.school} • {progressData.student.subjects}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
-              <div className="text-center">
-                <span className="text-[10px] uppercase font-bold text-sky-200 block">Total Sesi</span>
-                <span className="text-xl font-extrabold">{progressData.student.total_sessions_completed || 0}</span>
-              </div>
-              <div className="h-8 w-px bg-white/20" />
-              <div className="text-center">
-                <span className="text-[10px] uppercase font-bold text-sky-200 block">Kehadiran</span>
-                <span className="text-xl font-extrabold">
-                  {progressData.attendanceStats.total > 0
-                    ? `${Math.round((progressData.attendanceStats.hadir / progressData.attendanceStats.total) * 100)}%`
-                    : "100%"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Score Trend Line Chart */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Tren Skor Nilai Latihan Sesi</h3>
-                <p className="text-xs text-slate-500">Perkembangan nilai per pertemuan yang dicatat tutor</p>
-              </div>
-
-              <div className="h-64 w-full">
-                {progressData.scoreTrends?.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={progressData.scoreTrends}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="session" stroke="#94a3b8" fontSize={11} />
-                      <YAxis domain={[60, 100]} stroke="#94a3b8" fontSize={11} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1e293b",
-                          borderRadius: "12px",
-                          border: "none",
-                          color: "#fff",
-                          fontSize: "12px"
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="score"
-                        name="Skor Nilai"
-                        stroke="#0284c7"
-                        strokeWidth={3}
-                        dot={{ r: 5, fill: "#0284c7" }}
-                        activeDot={{ r: 7 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                    Belum ada data nilai latihan.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Attendance Pie Chart */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-800">Distribusi Kehadiran</h3>
-                <p className="text-xs text-slate-500">Rasio status kehadiran sesi</p>
-              </div>
-
-              <div className="h-52 w-full flex items-center justify-center">
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={75}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-xs text-slate-400">Belum ada data absensi.</p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
-                {pieData.map((item, idx) => (
-                  <div key={item.name} className="flex items-center gap-1.5">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                    />
-                    <span className="text-slate-600 font-semibold">{item.name}: {item.value}</span>
-                  </div>
+      {/* Parent Filter Bar */}
+      {role === "parent" ? (
+        <ParentFilterBar />
+      ) : (
+        /* Tutor / Admin Filter Bar */
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-emerald-600" />
+              <select
+                value={tutorStudentId}
+                onChange={(e) => setTutorStudentId(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-800"
+              >
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Siswa: {s.name} ({s.program_name})
+                  </option>
                 ))}
-              </div>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <select
+                value={selectedProgramFilter}
+                onChange={(e) => setSelectedProgramFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-800"
+              >
+                <option value="Semua Program">Semua Program</option>
+                <option value="Cermat Matematika">Cermat Matematika</option>
+                <option value="English BEC">English BEC</option>
+                <option value="Mengaji & Tahfidz">Mengaji & Tahfidz</option>
+                <option value="Pracalis Calistung">Pracalis Calistung</option>
+              </select>
             </div>
           </div>
 
-          {/* Learning Milestones (Mastery Targets) */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-800">Target Capaian & Penguasaan Materi (Milestones)</h3>
-              <p className="text-xs text-slate-500">Tahapan kompetensi belajar yang sedang dikejar</p>
-            </div>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-800"
+            >
+              <option value="Agustus 2026">Periode: Agustus 2026</option>
+              <option value="Juli 2026">Periode: Juli 2026</option>
+              <option value="September 2026">Periode: September 2026</option>
+            </select>
+          </div>
+        </div>
+      )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {progressData.learningMilestones?.map((milestone, idx) => (
-                <div
-                  key={idx}
-                  className={`p-4 rounded-2xl border transition-all ${
-                    milestone.completed
-                      ? "bg-emerald-50/60 border-emerald-200"
-                      : "bg-slate-50 border-slate-200"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <span className="text-xs font-bold text-slate-800">{milestone.name}</span>
-                    {milestone.completed ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    ) : (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                        {Math.round(milestone.progress)}%
-                      </span>
-                    )}
+      {/* Key Metric Highlights */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-lg">
+            <CheckCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase">Taraf Kehadiran</p>
+            <h3 className="text-xl font-extrabold text-slate-900 mt-0.5">100% Hadir</h3>
+            <p className="text-xs text-emerald-600 font-semibold">Semua sesi terlaksana sesuai jadwal</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-extrabold text-lg">
+            <Award className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase">Status Capaian Sesi</p>
+            <h3 className="text-xl font-extrabold text-slate-900 mt-0.5">Taraf Baik</h3>
+            <p className="text-xs text-sky-600 font-semibold">Target materi tuntas dipahami</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-extrabold text-lg">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase">Evaluasi Berkala</p>
+            <h3 className="text-xl font-extrabold text-slate-900 mt-0.5">2 Laporan / Bulan</h3>
+            <p className="text-xs text-purple-600 font-semibold">Tengah & Akhir Periode</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Bars per Program (e.g. 6/8 Pertemuan) */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900">
+              Progress Pertemuan Sesi Bulan Ini ({selectedPeriod})
+            </h3>
+            <p className="text-xs text-slate-500">
+              Jumlah pertemuan yang telah diselesaikan terhadap kuota paket bulanan (4/8/12 sesi).
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {programs.map((p) => {
+            const pct = Math.min(100, Math.round(((p.completed_sessions_month || 0) / (p.package_sessions || 8)) * 100));
+            return (
+              <div key={p.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-slate-800 text-sm">{p.program_name}</span>
+                  <span className="text-xs font-extrabold text-primary-700 bg-primary-50 px-2.5 py-0.5 rounded-lg">
+                    {p.completed_sessions_month}/{p.package_sessions} Sesi
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">📍 {p.unit_name} &bull; {p.class_type || "Semi Privat"}</p>
+
+                <div>
+                  <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                    <span>Kemajuan Kuota</span>
+                    <span className="text-primary-700">{pct}%</span>
                   </div>
-
-                  <div className="w-full bg-slate-200 rounded-full h-1.5 mt-3 overflow-hidden">
+                  <div className="w-full h-2.5 bg-slate-200/70 rounded-full overflow-hidden">
                     <div
-                      className={`h-1.5 rounded-full ${
-                        milestone.completed ? "bg-emerald-500" : "bg-primary-500"
-                      }`}
-                      style={{ width: `${milestone.progress}%` }}
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
                     />
                   </div>
                 </div>
-              ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hasil Evaluasi Tengah Periode & Akhir Periode Cards */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900">
+              Hasil Evaluasi Berkala Siswa
+            </h3>
+            <p className="text-xs text-slate-500">
+              Rangkuman capaian pembelajaran tengah periode (Sesi #4) dan akhir periode (Sesi #8 / #12)
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          {/* Mid Period */}
+          <div className="p-4 rounded-xl bg-purple-50/50 border border-purple-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase tracking-wider text-purple-800 bg-purple-100 px-2.5 py-1 rounded-lg">
+                📌 Evaluasi Tengah Periode (Sesi #4)
+              </span>
+              <span className="text-[11px] font-bold text-slate-400">15 Agustus 2026</span>
+            </div>
+            <p className="text-xs text-slate-800 font-semibold leading-relaxed">
+              "Ananda menunjukkan penguasaan konsep dasar KPK & FPB yang sangat baik. Mampu mengerjakan latihan soal pemahaman secara mandiri."
+            </p>
+            <div className="pt-2 border-t border-purple-100 text-[11px] text-purple-950 flex items-center justify-between">
+              <span>🎯 Target Pertemuan Lanjutan: Soal Cerita HOTS</span>
+              <span className="font-bold text-purple-700">Tuntas 100%</span>
+            </div>
+          </div>
+
+          {/* Final Period */}
+          <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
+                🏆 Evaluasi Akhir Periode (Sesi #8)
+              </span>
+              <span className="text-[11px] font-bold text-slate-400">28 Agustus 2026</span>
+            </div>
+            <p className="text-xs text-slate-800 font-semibold leading-relaxed">
+              "Ananda telah menyelesaikan seluruh paket modul bulan berjalan dengan penguasaan pecahan campuran dan desimal yang sangat memuaskan."
+            </p>
+            <div className="pt-2 border-t border-emerald-100 text-[11px] text-emerald-950 flex items-center justify-between">
+              <span>🎯 Rekomendasi: Masuk Materi Pengukuran & Geometri</span>
+              <span className="font-bold text-emerald-700">Sangat Memuaskan</span>
             </div>
           </div>
         </div>
-      ) : null}
+      </div>
+
+      {/* Riwayat Jurnal Singkat Materi */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900">
+              Riwayat Jurnal Singkat & Capaian Sesi
+            </h3>
+            <p className="text-xs text-slate-500">
+              Catatan materi yang dipelajari dan target yang tuntas dicapai siswa
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {journals.map((j) => (
+            <div
+              key={j.id}
+              className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-slate-900 text-sm">{j.topic}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary-50 text-primary-700">
+                    {j.program_name}
+                  </span>
+                  <span className="text-slate-400 text-[11px] font-medium">{formatDate(j.date)}</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed max-w-2xl">{j.targets_achieved}</p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {j.score && (
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-extrabold text-xs rounded-xl">
+                    Skor: {j.score}/100
+                  </span>
+                )}
+                {j.fluency_rating && (
+                  <span className="px-3 py-1 bg-sky-100 text-sky-800 font-bold text-xs rounded-xl">
+                    Kelancaran: {j.fluency_rating}
+                  </span>
+                )}
+                {j.memorization_surah && (
+                  <span className="px-3 py-1 bg-purple-100 text-purple-800 font-bold text-xs rounded-xl">
+                    Hafalan: {j.memorization_surah}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

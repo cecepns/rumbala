@@ -1,65 +1,151 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { useParentPortal } from "../../context/ParentPortalContext";
 import { request } from "../../utils/request";
 import { API_ENDPOINTS } from "../../utils/endpoints";
-import { formatDate, createWhatsAppUrl, WA_TEMPLATES } from "../../utils/helpers";
+import { formatDate } from "../../utils/helpers";
+import ParentFilterBar from "../../components/common/ParentFilterBar";
 import Modal from "../../components/common/Modal";
 import EmptyState from "../../components/common/EmptyState";
-import { Sparkles, Printer, MessageCircle, FileText, CheckCircle, Brain, RefreshCw } from "lucide-react";
+import { TableSkeleton } from "../../components/common/Skeleton";
+import {
+  Sparkles,
+  BookOpen,
+  User,
+  Calendar,
+  CheckCircle2,
+  Edit2,
+  Printer,
+  Download,
+  Share2,
+  Award,
+  ArrowRight,
+  Send,
+  Eye,
+  Layers,
+  Clock
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function AIReportGenerator() {
+  const { role, user } = useAuth();
+  const { selectedChildId, selectedProgram } = useParentPortal();
   const [reports, setReports] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [reportType, setReportType] = useState("monthly");
-  const [periodName, setPeriodName] = useState("Agustus 2026");
-  const [customPrompt, setCustomPrompt] = useState("");
+  // Generate AI Modal State (Tutor/Admin)
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
+  const [generateForm, setGenerateForm] = useState({
+    student_id: "",
+    program_name: "Cermat Matematika",
+    report_type: "mid_period", // 'mid_period' (Evaluasi Tengah Periode) or 'final_period' (Evaluasi Akhir Periode)
+    period: "Agustus 2026",
+    // Rubric Fields for Flexible Evaluation
+    concept_understanding: "Baik",
+    accuracy_rating: "Berkembang",
+    vocabulary_rating: "Baik",
+    grammar_rating: "Berkembang",
+    reading_rating: "Baik",
+    english_level: "Intro 1",
+    speed_rating: "Berkembang",
+    technique_rating: "Baik",
+    concentration_rating: "Baik",
+    fluency_rating: "Baik",
+    makhraj_rating: "Sesuai Kaidah",
+    mad_rating: "Berkembang",
+    tajwid_rating: "Baik",
+    memorization_target: "Surah Al-Mulk ayat 1-15",
+    murojaah_status: "Lancar",
+    next_target: "Surah Al-Mulk ayat 16-30"
+  });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [previewReport, setPreviewReport] = useState(null);
+  // View / Edit / Publish Modal
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    summary: "",
+    strengths: "",
+    areas_for_improvement: "",
+    recommendations: "",
+    status: "published",
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchStudents = async () => {
+    if (role === "parent") return;
     try {
-      setLoading(true);
-      const [rRes, sRes] = await Promise.all([
-        request.get(API_ENDPOINTS.AI_REPORTS.LIST),
-        request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 })
-      ]);
-      if (rRes.success) setReports(rRes.data || []);
-      if (sRes.success) {
-        setStudents(sRes.data || []);
-        if (sRes.data?.length > 0) setSelectedStudentId(sRes.data[0].id);
+      if (role === "tutor") {
+        const res = await request.get(API_ENDPOINTS.TUTOR_STUDENTS.LIST);
+        if (res.success && res.data) {
+          setStudents(res.data);
+          if (res.data.length > 0) {
+            setGenerateForm((prev) => ({
+              ...prev,
+              student_id: res.data[0].id,
+              program_name: res.data[0].program_name || "Cermat Matematika",
+            }));
+          }
+        }
+      } else {
+        const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
+        if (res.success && res.data) {
+          setStudents(res.data);
+          if (res.data.length > 0) {
+            setGenerateForm((prev) => ({
+              ...prev,
+              student_id: res.data[0].id,
+            }));
+          }
+        }
       }
     } catch (err) {
-      toast.error("Gagal memuat laporan AI");
-    } finally {
-      setLoading(false);
+      console.error(err);
     }
   };
 
-  const handleGenerate = async (e) => {
+  const fetchReports = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (role === "parent") {
+        if (selectedChildId) params.student_id = selectedChildId;
+        if (selectedProgram && selectedProgram !== "Semua Program") params.program_name = selectedProgram;
+      }
+
+      const res = await request.get(API_ENDPOINTS.AI_REPORTS.LIST, params);
+      if (res.success) {
+        setReports(res.data || []);
+      }
+    } catch (err) {
+      toast.error("Gagal memuat laporan perkembangan");
+    } finally {
+      setLoading(false);
+    }
+  }, [role, selectedChildId, selectedProgram]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [role]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
+
+  const handleGenerateAI = async (e) => {
     e.preventDefault();
-    if (!selectedStudentId) return;
     try {
       setIsGenerating(true);
-      const res = await request.post(API_ENDPOINTS.AI_REPORTS.GENERATE, {
-        student_id: selectedStudentId,
-        report_type: reportType,
-        period: periodName,
-        custom_prompt: customPrompt
-      });
+      const res = await request.post(API_ENDPOINTS.AI_REPORTS.GENERATE, generateForm);
       if (res.success) {
-        toast.success("Laporan AI Evaluasi Siswa berhasil di-generate!");
-        setIsGenerateModalOpen(false);
-        setPreviewReport(res.data);
-        fetchData();
+        toast.success(res.message || "Draft Laporan AI berhasil dibuat!");
+        setIsGenerateOpen(false);
+        fetchReports();
+        if (res.data) {
+          handleOpenEdit(res.data);
+        }
       }
     } catch (err) {
       toast.error(err.response?.data?.message || "Gagal membuat laporan AI");
@@ -68,286 +154,533 @@ export default function AIReportGenerator() {
     }
   };
 
-  const handleShareWA = (report) => {
-    const student = {
-      name: report.student_name,
-      parent_name: report.student_name,
-      parent_phone: report.parent_phone
-    };
-    const message = WA_TEMPLATES.LEARNING_REPORT(report, student);
-    const url = createWhatsAppUrl(report.parent_phone, message);
-    window.open(url, "_blank");
+  const handleOpenEdit = (rep) => {
+    setSelectedReport(rep);
+    setEditForm({
+      title: rep.title,
+      summary: rep.summary,
+      strengths: rep.strengths,
+      areas_for_improvement: rep.areas_for_improvement,
+      recommendations: rep.recommendations,
+      status: rep.status || "published",
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!selectedReport) return;
+    try {
+      setIsSavingEdit(true);
+      const res = await request.put(API_ENDPOINTS.AI_REPORTS.UPDATE(selectedReport.id), editForm);
+      if (res.success) {
+        toast.success("Laporan perkembangan berhasil disimpan!");
+        setIsEditModalOpen(false);
+        fetchReports();
+      }
+    } catch (err) {
+      toast.error("Gagal menyimpan laporan.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-purple-700 via-indigo-700 to-sky-700 p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white/20 backdrop-blur-md mb-3 text-purple-100">
-            <Brain className="w-3.5 h-3.5" /> Rumbala Smart AI Report Engine
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div>
+          <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
+            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Laporan Perkembangan"}
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Generate Laporan Evaluasi Siswa Berbasis AI ✨
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-purple-100/90 leading-relaxed">
-            Buat laporan harian, mingguan, bulanan, dan evaluasi rapor secara otomatis dari data akumulasi jurnal mengajar, kehadiran, dan skor latihan siswa.
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+            {role === "parent" ? "Laporan Perkembangan Ananda" : "Generate & Publikasi Laporan AI"}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            {role === "parent"
+              ? "Laporan resmi perkembangan belajar ananda (Evaluasi Tengah & Akhir Periode) yang diterbitkan oleh tutor pengampu."
+              : "Generate draft evaluasi berkala (Tengah Periode / Akhir Periode) per program & siswa, tinjau, lalu publish untuk orang tua."}
           </p>
         </div>
 
-        <button
-          onClick={() => setIsGenerateModalOpen(true)}
-          className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-extrabold shadow-lg transition-all flex items-center gap-2 self-start md:self-auto cursor-pointer"
-        >
-          <Sparkles className="w-4 h-4 text-amber-950" />
-          + Generate Laporan Baru
-        </button>
-      </div>
-
-      {/* Reports Grid */}
-      <div>
-        <h3 className="text-base font-bold text-slate-800 mb-4">Daftar Laporan Evaluasi AI Tersimpan</h3>
-        {loading ? (
-          <div className="p-8 text-center text-xs text-slate-400">Memuat laporan AI...</div>
-        ) : reports.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {reports.map((report) => (
-              <div
-                key={report.id}
-                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full inline-block">
-                        {report.report_type === "monthly" ? "Evaluasi Bulanan" : report.report_type === "weekly" ? "Evaluasi Mingguan" : report.report_type === "report_card" ? "Komentar Rapor" : "Laporan Harian"}
-                      </span>
-                      <h4 className="text-sm font-extrabold text-slate-800 mt-1.5">{report.title}</h4>
-                      <p className="text-[11px] text-slate-400">Periode: {report.period}</p>
-                    </div>
-                    <span className="text-[11px] font-semibold text-slate-400">{formatDate(report.created_at)}</span>
-                  </div>
-
-                  <div className="mt-3 space-y-2 text-xs">
-                    <p className="text-slate-600 line-clamp-3 leading-relaxed">{report.summary}</p>
-                    <div className="pt-1">
-                      <span className="font-bold text-slate-700">Rekomendasi Utama:</span>
-                      <p className="text-slate-600 line-clamp-2 mt-0.5">{report.recommendations}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700">{report.student_name}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleShareWA(report)}
-                      title="Kirim ke WA Orang Tua"
-                      className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                    >
-                      <MessageCircle className="w-4 h-4" /> WA Ortu
-                    </button>
-                    <button
-                      onClick={() => setPreviewReport(report)}
-                      className="px-3 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-lg transition-colors"
-                    >
-                      Buka Laporan
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={Sparkles}
-            title="Belum Ada Laporan AI"
-            description="Klik tombol '+ Generate Laporan Baru' untuk membuat evaluasi rapor pintar."
-            actionText="+ Generate Laporan Baru"
-            onAction={() => setIsGenerateModalOpen(true)}
-          />
+        {role !== "parent" && (
+          <button
+            onClick={() => setIsGenerateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-purple-500/30 transition-all cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-purple-200" />
+            + Buat Laporan Berkala AI
+          </button>
         )}
       </div>
 
-      {/* Generate Modal */}
-      <Modal
-        isOpen={isGenerateModalOpen}
-        onClose={() => setIsGenerateModalOpen(false)}
-        title="Generate Laporan Pembelajaran AI"
-        subtitle="Sistem akan menganalisis histori jurnal, absensi, dan skor siswa"
-      >
-        <form onSubmit={handleGenerate} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Pilih Siswa yang Dievaluasi *
-            </label>
-            <select
-              required
-              value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-purple-500/20"
-            >
-              {students.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.class_grade} - {s.subjects})
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Parent Filter Bar */}
+      {role === "parent" && <ParentFilterBar />}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Reports Grid */}
+      {loading ? (
+        <TableSkeleton rows={4} cols={4} />
+      ) : reports.length === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="Belum Ada Laporan Perkembangan"
+          description="Laporan evaluasi berkala siswa per program akan ditampilkan di sini."
+          actionText={role !== "parent" ? "Generate Laporan AI" : undefined}
+          onAction={role !== "parent" ? () => setIsGenerateOpen(true) : undefined}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {reports.map((rep) => (
+            <div
+              key={rep.id}
+              className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:border-primary-300 transition-all flex flex-col justify-between space-y-5"
+            >
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-primary-50 text-primary-700">
+                        {rep.program_name} &bull; {rep.period}
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-purple-50 text-purple-700">
+                        {rep.title?.includes("Tengah") ? "Evaluasi Tengah Periode" : "Evaluasi Akhir Periode"}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-extrabold text-slate-900 mt-1">
+                      {rep.title}
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-600 mt-0.5">
+                      Siswa: <span className="font-extrabold text-slate-900">{rep.student_name}</span> &bull; 👩‍🏫 Tutor:{" "}
+                      <span className="font-bold text-slate-800">{rep.tutor_name || "Sarah Azzahra"}</span>
+                    </p>
+                  </div>
+
+                  <div>
+                    {rep.status === "published" ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Resmi (Published)
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                        Draft Tutor
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Content Sections */}
+                <div className="mt-4 space-y-3 text-xs text-slate-700 leading-relaxed">
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Ringkasan Kemajuan Belajar
+                    </p>
+                    <p className="font-medium text-slate-800">{rep.summary}</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100 text-emerald-950">
+                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">
+                      🌟 Kekuatan & Kemampuan yang Dikuasai
+                    </p>
+                    <p className="font-medium">{rep.strengths}</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-100 text-amber-950">
+                    <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-1">
+                      🎯 Bagian yang Perlu Ditingkatkan
+                    </p>
+                    <p className="font-medium">{rep.areas_for_improvement}</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-sky-50/60 border border-sky-100 text-sky-950">
+                    <p className="text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">
+                      💡 Target & Rekomendasi Latihan
+                    </p>
+                    <p className="font-medium">{rep.recommendations}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Diterbitkan {formatDate(rep.created_at)}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrint}
+                    className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+                    title="Cetak Laporan"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+
+                  {role !== "parent" && (
+                    <button
+                      onClick={() => handleOpenEdit(rep)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      Edit / Publish
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Generate AI (Tutor/Admin) with Periodic Schedule & Flexible Rubric */}
+      <Modal
+        isOpen={isGenerateOpen}
+        onClose={() => setIsGenerateOpen(false)}
+        title="Generate Draft Laporan Perkembangan Berkala (AI)"
+        maxWidth="max-w-xl"
+      >
+        <form onSubmit={handleGenerateAI} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Tipe Laporan *
+                Pilih Siswa
               </label>
               <select
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-purple-500/20"
+                value={generateForm.student_id}
+                onChange={(e) => {
+                  const st = students.find((s) => s.id === Number(e.target.value));
+                  setGenerateForm({
+                    ...generateForm,
+                    student_id: e.target.value,
+                    program_name: st?.program_name || "Cermat Matematika",
+                  });
+                }}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                required
               >
-                <option value="monthly">Evaluasi Bulanan</option>
-                <option value="weekly">Evaluasi Mingguan</option>
-                <option value="report_card">Komentar Rapor Resmi</option>
-                <option value="daily">Laporan Harian Sesi</option>
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.program_name})
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Periode Belajar *
+                Program Belajar
               </label>
               <input
                 type="text"
-                required
-                value={periodName}
-                onChange={(e) => setPeriodName(e.target.value)}
-                placeholder="Contoh: Agustus 2026 / Minggu ke-3"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-purple-500/20"
+                value={generateForm.program_name}
+                disabled
+                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Catatan Khusus Tambahan untuk AI (Opsional)
-            </label>
-            <textarea
-              rows={2}
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="Contoh: Tekankan motivasi ananda dalam materi geometri dan apresiasi kerapihan catatannya..."
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-purple-500/20"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Jenis Laporan Berkala
+              </label>
+              <select
+                value={generateForm.report_type}
+                onChange={(e) => setGenerateForm({ ...generateForm, report_type: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+              >
+                <option value="mid_period">Evaluasi Tengah Periode (Sesi #4 / #6)</option>
+                <option value="final_period">Evaluasi Akhir Periode (Sesi #8 / #12)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Periode Bulan
+              </label>
+              <input
+                type="text"
+                value={generateForm.period}
+                onChange={(e) => setGenerateForm({ ...generateForm, period: e.target.value })}
+                placeholder="Agustus 2026"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
+                required
+              />
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          {/* Program-Specific Flexible Rubric Form */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-purple-600" />
+              Indikator Evaluasi Capaian ({generateForm.program_name})
+            </span>
+
+            {/* Matematika Rubric */}
+            {generateForm.program_name.includes("Matematika") && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Pemahaman Konsep</label>
+                  <select
+                    value={generateForm.concept_understanding}
+                    onChange={(e) => setGenerateForm({ ...generateForm, concept_understanding: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Sangat Baik">Sangat Baik</option>
+                    <option value="Baik">Baik</option>
+                    <option value="Berkembang">Berkembang</option>
+                    <option value="Perlu Latihan">Perlu Latihan</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Ketelitian Berhitung</label>
+                  <select
+                    value={generateForm.accuracy_rating}
+                    onChange={(e) => setGenerateForm({ ...generateForm, accuracy_rating: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Sangat Teliti">Sangat Teliti</option>
+                    <option value="Baik / Teliti">Baik / Teliti</option>
+                    <option value="Berkembang">Berkembang</option>
+                    <option value="Perlu Ditingkatkan">Perlu Ditingkatkan</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* English Rubric */}
+            {generateForm.program_name.includes("English") && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Vocabulary</label>
+                  <select
+                    value={generateForm.vocabulary_rating}
+                    onChange={(e) => setGenerateForm({ ...generateForm, vocabulary_rating: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Sangat Baik">Sangat Baik</option>
+                    <option value="Baik">Baik</option>
+                    <option value="Berkembang">Berkembang</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Grammar</label>
+                  <select
+                    value={generateForm.grammar_rating}
+                    onChange={(e) => setGenerateForm({ ...generateForm, grammar_rating: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Baik">Baik</option>
+                    <option value="Berkembang">Berkembang</option>
+                    <option value="Perlu Latihan">Perlu Latihan</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Level</label>
+                  <input
+                    type="text"
+                    value={generateForm.english_level}
+                    onChange={(e) => setGenerateForm({ ...generateForm, english_level: e.target.value })}
+                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Mengaji / Tahfidz Rubric */}
+            {(generateForm.program_name.includes("Mengaji") || generateForm.program_name.includes("Tahfidz")) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Kelancaran & Makhraj</label>
+                  <select
+                    value={generateForm.makhraj_rating}
+                    onChange={(e) => setGenerateForm({ ...generateForm, makhraj_rating: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Fasih Sesuai Kaidah">Fasih Sesuai Kaidah</option>
+                    <option value="Baik / Berkembang">Baik / Berkembang</option>
+                    <option value="Perlu Penguatan">Perlu Penguatan</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Target Hafalan / Setoran</label>
+                  <input
+                    type="text"
+                    value={generateForm.memorization_target}
+                    onChange={(e) => setGenerateForm({ ...generateForm, memorization_target: e.target.value })}
+                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Pracalis / Calistung Rubric */}
+            {generateForm.program_name.includes("Pracalis") && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Mengenal Huruf & Suku Kata</label>
+                  <select
+                    value={generateForm.concept_understanding}
+                    onChange={(e) => setGenerateForm({ ...generateForm, concept_understanding: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Sangat Lancar">Sangat Lancar</option>
+                    <option value="Lancar / Baik">Lancar / Baik</option>
+                    <option value="Berkembang">Berkembang</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Motorik Menulis</label>
+                  <select
+                    value={generateForm.accuracy_rating}
+                    onChange={(e) => setGenerateForm({ ...generateForm, accuracy_rating: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Rapi & Mandiri">Rapi & Mandiri</option>
+                    <option value="Berkembang Baik">Berkembang Baik</option>
+                    <option value="Perlu Latihan">Perlu Latihan</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-900">
+            <span className="font-bold flex items-center gap-1.5 mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              Alur Review & Human In The Loop:
+            </span>
+            AI akan merangkum jurnal kehadiran dan indikator di atas menjadi draft laporan. Anda dapat mereview dan mengedit sebelum dipublish ke orang tua.
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              onClick={() => setIsGenerateModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              onClick={() => setIsGenerateOpen(false)}
+              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isGenerating}
-              className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl transition-colors shadow-md flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 flex items-center gap-2 cursor-pointer"
             >
-              {isGenerating ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" /> Memproses AI...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" /> Mulai Generate AI
-                </>
-              )}
+              <Sparkles className="w-3.5 h-3.5" />
+              {isGenerating ? "Sedang Menyusun Draft..." : "Generate Draft AI"}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Preview Full Report Modal */}
+      {/* Modal Review & Publish Report */}
       <Modal
-        isOpen={!!previewReport}
-        onClose={() => setPreviewReport(null)}
-        title="Dokumen Evaluasi Pembelajaran Siswa"
-        subtitle="Format resmi laporan Rumbala"
-        maxWidth="max-w-3xl"
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Tinjau & Publish Laporan Perkembangan Siswa"
+        maxWidth="max-w-2xl"
       >
-        {previewReport && (
-          <div className="space-y-6 text-xs text-slate-800">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-              <div className="flex items-center gap-3">
-                <img src="/logo.png" alt="Rumbala" className="h-10 w-auto" />
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">{previewReport.title}</h3>
-                  <p className="text-slate-500 font-medium">{previewReport.period} • Siswa: {previewReport.student_name}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => window.print()}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" /> Cetak
-              </button>
-            </div>
-
-            {/* Sections */}
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1.5">
-                  1. Ringkasan & Capaian Akademik
-                </h4>
-                <p className="text-slate-700 leading-relaxed whitespace-pre-line">{previewReport.summary}</p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200">
-                <h4 className="font-bold text-emerald-900 uppercase tracking-wider text-[11px] mb-1.5">
-                  2. Kelebihan & Potensi Siswa (Strengths)
-                </h4>
-                <p className="text-emerald-800 leading-relaxed whitespace-pre-line">{previewReport.strengths}</p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200">
-                <h4 className="font-bold text-amber-900 uppercase tracking-wider text-[11px] mb-1.5">
-                  3. Aspek yang Perlu Ditingkatkan
-                </h4>
-                <p className="text-amber-800 leading-relaxed whitespace-pre-line">{previewReport.areas_for_improvement}</p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200">
-                <h4 className="font-bold text-indigo-900 uppercase tracking-wider text-[11px] mb-1.5">
-                  4. Rekomendasi Pembelajaran & Kolaborasi Rumah
-                </h4>
-                <p className="text-indigo-800 leading-relaxed whitespace-pre-line">{previewReport.recommendations}</p>
-              </div>
-
-              {previewReport.ai_generated_notes && (
-                <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[11px] font-mono whitespace-pre-line">
-                  {previewReport.ai_generated_notes}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-              <button
-                onClick={() => handleShareWA(previewReport)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" /> Kirimkan Hasil ke WhatsApp Orang Tua
-              </button>
-
-              <button
-                onClick={() => setPreviewReport(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
-              >
-                Tutup
-              </button>
-            </div>
+        <form onSubmit={handleSaveEdit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Judul Laporan
+            </label>
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold"
+              required
+            />
           </div>
-        )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Ringkasan Kemajuan Belajar
+            </label>
+            <textarea
+              rows={3}
+              value={editForm.summary}
+              onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Kekuatan & Kemampuan yang Dikuasai
+            </label>
+            <textarea
+              rows={2}
+              value={editForm.strengths}
+              onChange={(e) => setEditForm({ ...editForm, strengths: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Bagian yang Perlu Ditingkatkan
+            </label>
+            <textarea
+              rows={2}
+              value={editForm.areas_for_improvement}
+              onChange={(e) => setEditForm({ ...editForm, areas_for_improvement: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Target & Rekomendasi Latihan
+            </label>
+            <textarea
+              rows={2}
+              value={editForm.recommendations}
+              onChange={(e) => setEditForm({ ...editForm, recommendations: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Status Publikasi
+            </label>
+            <select
+              value={editForm.status}
+              onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold"
+            >
+              <option value="published">Publish Resmi ke Orang Tua</option>
+              <option value="draft">Simpan Sebagai Draft Tutor</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsEditModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingEdit}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingEdit ? "Menyimpan..." : "Simpan & Terbitkan Laporan"}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

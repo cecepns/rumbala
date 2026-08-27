@@ -1,66 +1,62 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useParentPortal } from "../../context/ParentPortalContext";
 import { request } from "../../utils/request";
 import { API_ENDPOINTS } from "../../utils/endpoints";
-import { formatRupiah, formatDate, createWhatsAppUrl, WA_TEMPLATES } from "../../utils/helpers";
+import { formatDate, formatRupiah } from "../../utils/helpers";
+import ParentFilterBar from "../../components/common/ParentFilterBar";
 import DebouncedSearch from "../../components/common/DebouncedSearch";
-import Pagination from "../../components/common/Pagination";
 import Modal from "../../components/common/Modal";
-import PrintableInvoice from "../../components/invoice/PrintableInvoice";
-import { TableSkeleton } from "../../components/common/Skeleton";
 import EmptyState from "../../components/common/EmptyState";
+import { TableSkeleton } from "../../components/common/Skeleton";
 import {
   Receipt,
-  Plus,
-  Eye,
   CheckCircle,
   Clock,
-  MessageCircle,
+  Upload,
+  Plus,
   Printer,
-  Sparkles,
-  AlertCircle
+  FileText,
+  AlertCircle,
+  CreditCard,
+  Building,
+  User,
+  Sparkles
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function InvoiceList() {
-  const { user, role } = useAuth();
+  const { role, user } = useAuth();
+  const { selectedChildId, selectedProgram } = useParentPortal();
   const [invoices, setInvoices] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  // Payment Modal
+  const [paymentTarget, setPaymentTarget] = useState(null);
+  const [paymentFile, setPaymentFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Manual Generate Modal
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  // Generate Monthly SPP Modal (Admin)
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
+  const [generateForm, setGenerateForm] = useState({
     student_id: "",
-    milestone_name: "Paket 4 Pertemuan",
-    sessions_count: 4,
-    amount: 400000,
-    due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    notes: ""
+    period_month: "Agustus 2026",
+    due_date: "2026-08-10",
+    notes: "Tagihan SPP Bulanan Program Les Rumbala",
   });
-  const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const fetchStudents = async () => {
+    if (role !== "admin") return;
     try {
       const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
-      if (res.success) {
-        setStudents(res.data || []);
-        if (res.data?.length > 0) {
-          setFormData((prev) => ({
-            ...prev,
-            student_id: res.data[0].id,
-            amount: res.data[0].tuition_fee_per_session * 4
-          }));
+      if (res.success && res.data) {
+        setStudents(res.data);
+        if (res.data.length > 0) {
+          setGenerateForm((prev) => ({ ...prev, student_id: res.data[0].id }));
         }
       }
     } catch (err) {
@@ -71,407 +67,403 @@ export default function InvoiceList() {
   const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        page,
-        limit,
-        search,
-        status: statusFilter
-      };
-      if (role === "parent" && user?.student_id) {
-        params.student_id = user.student_id;
+      const params = {};
+      if (statusFilter) params.status = statusFilter;
+      if (role === "parent" && selectedChildId) {
+        params.student_id = selectedChildId;
       }
 
       const res = await request.get(API_ENDPOINTS.INVOICES.LIST, params);
       if (res.success) {
         setInvoices(res.data || []);
-        setTotal(res.pagination?.total || 0);
-        setTotalPages(res.pagination?.totalPages || 1);
       }
     } catch (err) {
-      toast.error("Gagal memuat daftar invoice");
+      toast.error("Gagal memuat daftar tagihan invoice");
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, statusFilter, role, user]);
+  }, [statusFilter, role, selectedChildId]);
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  const handleOpenPreview = async (invoiceId) => {
-    try {
-      const res = await request.get(API_ENDPOINTS.INVOICES.DETAIL(invoiceId));
-      if (res.success) {
-        setSelectedInvoice(res.data);
-        setIsPreviewOpen(true);
-      }
-    } catch (err) {
-      toast.error("Gagal memuat rincian invoice");
-    }
+  const handleOpenPayment = (inv) => {
+    setPaymentTarget(inv);
+    setPaymentFile(null);
   };
 
-  const handleMarkAsPaid = async (invoiceId) => {
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    if (!paymentTarget) return;
+
     try {
-      const res = await request.put(API_ENDPOINTS.INVOICES.PAY(invoiceId), { status: "paid" });
+      setIsUploading(true);
+      const formData = new FormData();
+      if (paymentFile) {
+        formData.append("payment_proof", paymentFile);
+      }
+
+      const res = await request.post(API_ENDPOINTS.INVOICES.PAY(paymentTarget.id), formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
       if (res.success) {
-        toast.success("Invoice berhasil ditandai Lunas!");
-        if (selectedInvoice && selectedInvoice.id === invoiceId) {
-          setSelectedInvoice({ ...selectedInvoice, status: "paid", paid_at: new Date() });
-        }
+        toast.success(res.message || "Bukti transfer berhasil diunggah!");
+        setPaymentTarget(null);
         fetchInvoices();
       }
     } catch (err) {
-      toast.error("Gagal memperbarui status pembayaran");
+      toast.error(err.response?.data?.message || "Gagal mengunggah pembayaran");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleSendWA = (inv) => {
-    const student = {
-      name: inv.student_name,
-      parent_name: inv.parent_name,
-      parent_phone: inv.parent_phone
-    };
-    const message = WA_TEMPLATES.INVOICE_BILLING(inv, student);
-    const url = createWhatsAppUrl(inv.parent_phone, message);
-    window.open(url, "_blank");
-  };
-
-  const handleSaveManual = async (e) => {
+  const handleGenerateSubmit = async (e) => {
     e.preventDefault();
     try {
-      setIsSaving(true);
-      const res = await request.post(API_ENDPOINTS.INVOICES.GENERATE_MANUAL, formData);
+      setIsGenerating(true);
+      const res = await request.post(API_ENDPOINTS.INVOICES.GENERATE_MONTHLY, generateForm);
       if (res.success) {
-        toast.success("Invoice baru berhasil diterbitkan!");
-        setIsManualModalOpen(false);
+        toast.success("Tagihan SPP Bulanan berhasil diterbitkan!");
+        setIsGenerateOpen(false);
         fetchInvoices();
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Gagal membuat invoice");
+      toast.error(err.response?.data?.message || "Gagal menerbitkan SPP");
     } finally {
-      setIsSaving(false);
+      setIsGenerating(false);
+    }
+  };
+
+  const getStatusBadge = (st) => {
+    switch (st) {
+      case "paid":
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+            Lunas (Terverifikasi)
+          </span>
+        );
+      case "pending_verification":
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-sky-100 text-sky-800 border border-sky-200">
+            <Clock className="w-3.5 h-3.5 text-sky-600" />
+            Menunggu Verifikasi Admin
+          </span>
+        );
+      case "unpaid":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+            Belum Dibayar
+          </span>
+        );
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-            <Receipt className="w-6 h-6 text-primary-600" />
-            Invoice & Tagihan Pembelajaran
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Sistem otomatis menghasilkan tagihan pada setiap milestone <span className="font-bold text-primary-700">4, 8, dan 12 pertemuan</span> selesai.
+          <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
+            {role === "parent" ? "Portal Orang Tua" : "Manajemen Keuangan"}
+          </span>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+            Tagihan & Invoice SPP Bulanan
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Tagihan SPP resmi berdasarkan paket pertemuan per bulan dengan rincian biaya masing-masing program les.
           </p>
         </div>
 
         {role === "admin" && (
           <button
-            onClick={() => setIsManualModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+            onClick={() => setIsGenerateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-primary-500/30 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Terbitkan Tagihan Manual
+            Terbitkan SPP Bulanan Baru
           </button>
         )}
       </div>
 
-      {/* Auto Milestone Banner */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-white/20 backdrop-blur-md">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="font-extrabold text-sm">Siklus Tagihan Otomatis Per 4 Pertemuan</p>
-            <p className="text-xs text-amber-100 mt-0.5">
-              Setiap kali tutor mencatat absensi Hadir ke-4, 8, 12, sistem otomatis menerbitkan invoice dan siap dikirim via WhatsApp.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Parent Filter Bar */}
+      {role === "parent" && <ParentFilterBar />}
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <DebouncedSearch
-          placeholder="Cari no invoice, nama siswa, orang tua..."
-          onSearch={(val) => {
-            setSearch(val);
-            setPage(1);
-          }}
-          className="w-full sm:w-80"
-        />
-
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="w-full sm:w-auto px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-primary-500/20"
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setStatusFilter("")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            statusFilter === ""
+              ? "bg-slate-900 text-white"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
         >
-          <option value="">Semua Status Pembayaran</option>
-          <option value="unpaid">Belum Lunas</option>
-          <option value="paid">Lunas</option>
-          <option value="pending_verification">Menunggu Verifikasi</option>
-        </select>
+          Semua Tagihan
+        </button>
+        <button
+          onClick={() => setStatusFilter("paid")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            statusFilter === "paid"
+              ? "bg-emerald-600 text-white"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          Lunas
+        </button>
+        <button
+          onClick={() => setStatusFilter("unpaid")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            statusFilter === "unpaid"
+              ? "bg-amber-600 text-white"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          Belum Dibayar
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-6">
-            <TableSkeleton rows={5} cols={6} />
-          </div>
-        ) : invoices.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px]">
-                <tr>
-                  <th className="py-3.5 px-4">No. Invoice</th>
-                  <th className="py-3.5 px-4">Siswa & Wali</th>
-                  <th className="py-3.5 px-4">Paket Pertemuan</th>
-                  <th className="py-3.5 px-4">Jatuh Tempo</th>
-                  <th className="py-3.5 px-4">Nominal</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-extrabold text-slate-800">
-                      {inv.invoice_number}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-800">{inv.student_name}</p>
-                      <p className="text-[11px] text-slate-500">Wali: {inv.parent_name}</p>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px]">
-                        {inv.milestone_name || `Paket ${inv.sessions_count} Sesi`}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-600">
-                      {formatDate(inv.due_date)}
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-slate-900 text-sm">
-                      {formatRupiah(inv.amount)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          inv.status === "paid"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {inv.status === "paid" ? (
-                          <>
-                            <CheckCircle className="w-3 h-3" /> Lunas
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3 h-3" /> Belum Lunas
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleSendWA(inv)}
-                          title="Kirim Tagihan ke WA Orang Tua"
-                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          <span className="hidden sm:inline">WA</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenPreview(inv.id)}
-                          title="Lihat / Cetak Invoice"
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Detail</span>
-                        </button>
-
-                        {role === "admin" && inv.status !== "paid" && (
-                          <button
-                            onClick={() => handleMarkAsPaid(inv.id)}
-                            title="Tandai Sudah Lunas"
-                            className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            icon={Receipt}
-            title="Tidak Ada Tagihan"
-            description="Belum ada invoice yang diterbitkan untuk filter saat ini."
-          />
-        )}
-
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalItems={total}
-          limit={limit}
-          onPageChange={setPage}
-          onLimitChange={(newLimit) => {
-            setLimit(newLimit);
-            setPage(1);
-          }}
+      {/* Invoice List Cards */}
+      {loading ? (
+        <TableSkeleton rows={3} cols={4} />
+      ) : invoices.length === 0 ? (
+        <EmptyState
+          icon={Receipt}
+          title="Tidak Ada Tagihan Invoice"
+          description="Daftar invoice pembayaran SPP bulanan akan ditampilkan di sini."
         />
-      </div>
-
-      {/* Invoice Printable Preview Modal */}
-      <Modal
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        title="Rincian Dokumen Invoice Rumbala"
-        subtitle="Dapat diunduh dalam format PDF atau langsung dikirim via WhatsApp"
-        maxWidth="max-w-4xl"
-      >
-        <PrintableInvoice invoice={selectedInvoice} onMarkAsPaid={role === "admin" ? handleMarkAsPaid : undefined} />
-      </Modal>
-
-      {/* Manual Generate Modal */}
-      <Modal
-        isOpen={isManualModalOpen}
-        onClose={() => setIsManualModalOpen(false)}
-        title="Terbitkan Tagihan Manual"
-        subtitle="Buat tagihan kustom untuk pembayaran khusus atau cicilan"
-      >
-        <form onSubmit={handleSaveManual} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Pilih Siswa *
-            </label>
-            <select
-              required
-              value={formData.student_id}
-              onChange={(e) => {
-                const sId = e.target.value;
-                const s = students.find((item) => item.id == sId);
-                setFormData({
-                  ...formData,
-                  student_id: sId,
-                  amount: s ? s.tuition_fee_per_session * formData.sessions_count : formData.amount
-                });
-              }}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+      ) : (
+        <div className="space-y-4">
+          {invoices.map((inv) => (
+            <div
+              key={inv.id}
+              className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:border-primary-300 transition-all space-y-4"
             >
-              {students.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.class_grade} - {s.parent_name})
-                </option>
-              ))}
-            </select>
-          </div>
+              {/* Header Invoice */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                      {inv.invoice_number}
+                    </span>
+                    <span className="text-xs font-bold text-primary-700">
+                      {inv.period_month || "Agustus 2026"}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900 mt-1">
+                    {inv.milestone_name || "SPP Agustus 2026 – Paket 8 Pertemuan/Bulan – Lunas"}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Siswa: <span className="font-extrabold text-slate-800">{inv.student_name}</span> &bull; Wali:{" "}
+                    <span className="font-semibold text-slate-700">{inv.parent_name}</span>
+                  </p>
+                </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Keterangan Paket *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.milestone_name}
-                onChange={(e) => setFormData({ ...formData, milestone_name: e.target.value })}
-                placeholder="Contoh: Paket 4 Pertemuan (Sesi 1-4)"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-              />
+                <div className="flex flex-col sm:items-end gap-1">
+                  <div>{getStatusBadge(inv.status)}</div>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Jatuh Tempo: {formatDate(inv.due_date)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Rincian Tiap Program */}
+              <div className="space-y-2">
+                <p className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  Rincian Biaya per Program Belajar:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {inv.items && inv.items.length > 0 ? (
+                    inv.items.map((item, idx) => (
+                      <div key={idx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-extrabold text-slate-800">{item.program_name}</p>
+                          <p className="text-[11px] text-slate-500 truncate max-w-[180px]">{item.description}</p>
+                        </div>
+                        <span className="font-black text-primary-700 shrink-0">{formatRupiah(item.amount)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex justify-between text-xs col-span-3">
+                      <span>SPP Program Paket Belajar</span>
+                      <span className="font-bold text-primary-700">{formatRupiah(inv.amount)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer Total & Actions */}
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Total Tagihan:</span>
+                  <span className="text-xl font-black text-slate-900">{formatRupiah(inv.amount)}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Cetak Invoice
+                  </button>
+
+                  {inv.status !== "paid" && (
+                    <button
+                      onClick={() => handleOpenPayment(inv)}
+                      className="px-4 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {role === "admin" ? "Verifikasi Pembayaran" : "Bayar / Unggah Bukti Transfer"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Jumlah Sesi (Pertemuan) *
-              </label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={formData.sessions_count}
-                onChange={(e) => setFormData({ ...formData, sessions_count: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Nominal Tagihan (Rp) *
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="5000"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Jatuh Tempo Pembayaran *
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
-              />
+      {/* Modal Upload Payment / Verify */}
+      <Modal
+        isOpen={!!paymentTarget}
+        onClose={() => setPaymentTarget(null)}
+        title="Pembayaran & Konfirmasi Transfer SPP"
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handlePaymentSubmit} className="space-y-4">
+          <div className="p-4 rounded-xl bg-primary-50 border border-primary-100 text-primary-950 text-xs space-y-2">
+            <p className="font-bold uppercase tracking-wider text-primary-800">
+              Rekening Resmi Pembayaran Rumbala
+            </p>
+            <div className="space-y-1">
+              <p className="font-semibold">🏦 Bank BCA: <strong className="font-bold text-sm">8455-1234-88</strong></p>
+              <p className="font-semibold">A.N: <strong className="font-bold">Lembaga Rumah Belajar Alfatih</strong></p>
+              <p className="text-[11px] text-primary-700">Total Nominal: <strong className="text-sm font-black">{formatRupiah(paymentTarget?.amount || 0)}</strong></p>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Catatan Khusus
+              Unggah Foto / Bukti Transfer (Struk / Screenshot)
             </label>
             <input
-              type="text"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Catatan tambahan..."
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setPaymentFile(e.target.files[0])}
+              className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              onClick={() => setIsManualModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              onClick={() => setPaymentTarget(null)}
+              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
             >
               Batal
             </button>
             <button
               type="submit"
-              disabled={isSaving}
-              className="px-5 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors disabled:opacity-50"
+              disabled={isUploading}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
             >
-              {isSaving ? "Menerbitkan..." : "Terbitkan Invoice"}
+              {isUploading ? "Mengirim..." : role === "admin" ? "Verifikasi Lunas" : "Kirim Bukti Pembayaran"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Generate Monthly SPP (Admin) */}
+      <Modal
+        isOpen={isGenerateOpen}
+        onClose={() => setIsGenerateOpen(false)}
+        title="Terbitkan Tagihan SPP Bulanan Siswa"
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleGenerateSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Pilih Siswa
+            </label>
+            <select
+              value={generateForm.student_id}
+              onChange={(e) => setGenerateForm({ ...generateForm, student_id: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold"
+              required
+            >
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.parent_name})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Periode Bulan
+              </label>
+              <input
+                type="text"
+                value={generateForm.period_month}
+                onChange={(e) => setGenerateForm({ ...generateForm, period_month: e.target.value })}
+                placeholder="Agustus 2026"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Jatuh Tempo
+              </label>
+              <input
+                type="date"
+                value={generateForm.due_date}
+                onChange={(e) => setGenerateForm({ ...generateForm, due_date: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-semibold"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Catatan Tagihan
+            </label>
+            <input
+              type="text"
+              value={generateForm.notes}
+              onChange={(e) => setGenerateForm({ ...generateForm, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsGenerateOpen(false)}
+              className="px-4 py-2 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isGenerating}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
+            >
+              {isGenerating ? "Menerbitkan..." : "Terbitkan SPP"}
             </button>
           </div>
         </form>
