@@ -880,7 +880,7 @@ export default function StudentList() {
                 type="number"
                 required
                 min="0"
-                step="5000"
+                step="any"
                 value={programFormData.monthly_fee}
                 onChange={(e) => setProgramFormData({ ...programFormData, monthly_fee: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"

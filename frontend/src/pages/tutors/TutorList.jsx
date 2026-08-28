@@ -38,6 +38,16 @@ const AVAILABLE_CLASS_TYPES = [
   "Privat Home Visit"
 ];
 
+const DEFAULT_PROGRAM_OPTIONS = [
+  "Cermat Matematika",
+  "Prisma",
+  "English BEC",
+  "Calistung",
+  "Ngaji / Tahfidz",
+  "Bimbel Tematik SD",
+  "Sains & IPA"
+];
+
 export default function TutorList() {
   const [tutors, setTutors] = useState([]);
   const [programsList, setProgramsList] = useState([]);
@@ -56,10 +66,10 @@ export default function TutorList() {
     name: "",
     email: "",
     phone: "",
-    subjects: "Cermat Matematika",
+    subjects: ["Cermat Matematika"],
     units_teaching: ["Unit Riscon Rancaekek"],
     class_types: ["Semi Privat", "Privat di Tempat Les"],
-    fee_per_session: 80000,
+    fee_per_session: 75000,
     status: "active",
     bio: "",
     rates: []
@@ -73,7 +83,7 @@ export default function TutorList() {
     program_name: "Cermat Matematika",
     class_type: "Semi Privat",
     duration_minutes: 90,
-    rate_per_session: 80000,
+    rate_per_session: 75000,
     transport_fee: 0,
     notes: ""
   });
@@ -81,6 +91,13 @@ export default function TutorList() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const availablePrograms = Array.from(
+    new Set([
+      ...programsList.map((p) => p.name).filter(Boolean),
+      ...DEFAULT_PROGRAM_OPTIONS
+    ])
+  );
 
   const fetchOptions = async () => {
     try {
@@ -126,10 +143,10 @@ export default function TutorList() {
       name: "",
       email: "",
       phone: "",
-      subjects: "Cermat Matematika",
+      subjects: ["Cermat Matematika"],
       units_teaching: ["Unit Riscon Rancaekek"],
       class_types: ["Semi Privat", "Privat di Tempat Les"],
-      fee_per_session: 80000,
+      fee_per_session: 75000,
       status: "active",
       bio: "",
       rates: []
@@ -140,20 +157,23 @@ export default function TutorList() {
   const handleOpenEditModal = (tutor) => {
     setEditingTutor(tutor);
     const unitsArr = tutor.units_teaching
-      ? tutor.units_teaching.split(",").map((u) => u.trim())
+      ? tutor.units_teaching.split(",").map((u) => u.trim()).filter(Boolean)
       : ["Unit Riscon Rancaekek"];
     const classArr = tutor.class_types
-      ? tutor.class_types.split(",").map((c) => c.trim())
+      ? tutor.class_types.split(",").map((c) => c.trim()).filter(Boolean)
       : ["Semi Privat"];
+    const subjectsArr = tutor.subjects
+      ? tutor.subjects.split(",").map((s) => s.trim()).filter(Boolean)
+      : ["Cermat Matematika"];
 
     setFormData({
       name: tutor.name,
       email: tutor.email || "",
       phone: tutor.phone,
-      subjects: tutor.subjects || "",
+      subjects: subjectsArr,
       units_teaching: unitsArr,
       class_types: classArr,
-      fee_per_session: tutor.fee_per_session || 80000,
+      fee_per_session: tutor.fee_per_session || 75000,
       status: tutor.status || "active",
       bio: tutor.bio || "",
       rates: tutor.rates || []
@@ -167,8 +187,15 @@ export default function TutorList() {
       setIsSaving(true);
       const payload = {
         ...formData,
-        units_teaching: formData.units_teaching.join(", "),
-        class_types: formData.class_types.join(", ")
+        subjects: Array.isArray(formData.subjects)
+          ? formData.subjects.join(", ")
+          : (formData.subjects || ""),
+        units_teaching: Array.isArray(formData.units_teaching)
+          ? formData.units_teaching.join(", ")
+          : (formData.units_teaching || ""),
+        class_types: Array.isArray(formData.class_types)
+          ? formData.class_types.join(", ")
+          : (formData.class_types || "")
       };
 
       if (editingTutor) {
@@ -210,6 +237,21 @@ export default function TutorList() {
     }
   };
 
+  // Subject/Program checkbox toggle
+  const toggleSubject = (subject) => {
+    const current = Array.isArray(formData.subjects)
+      ? formData.subjects
+      : (formData.subjects ? formData.subjects.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    const exists = current.includes(subject);
+    const updated = exists
+      ? current.filter((s) => s !== subject)
+      : [...current, subject];
+    setFormData({
+      ...formData,
+      subjects: updated
+    });
+  };
+
   // Unit checkbox toggle
   const toggleUnit = (unit) => {
     const exists = formData.units_teaching.includes(unit);
@@ -239,7 +281,7 @@ export default function TutorList() {
       program_name: programsList[0]?.name || "Cermat Matematika",
       class_type: "Semi Privat",
       duration_minutes: 90,
-      rate_per_session: 80000,
+      rate_per_session: tutor.fee_per_session || 75000,
       transport_fee: 0,
       notes: ""
     });
@@ -576,16 +618,51 @@ export default function TutorList() {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Keahlian Mata Pelajaran / Program *
+                Status Keaktifan
               </label>
-              <input
-                type="text"
-                required
-                value={formData.subjects}
-                onChange={(e) => setFormData({ ...formData, subjects: e.target.value })}
-                placeholder="Contoh: Cermat Matematika, English BEC"
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
-              />
+              >
+                <option value="active">Aktif Mengajar</option>
+                <option value="inactive">Nonaktif</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Program & Keahlian Checkboxes */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase">
+                Pilihan Keahlian Program / Mata Pelajaran *
+              </label>
+              <span className="text-[11px] text-slate-400 font-medium">Bisa pilih lebih dari satu</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {availablePrograms.map((progName) => {
+                const isChecked = Array.isArray(formData.subjects)
+                  ? formData.subjects.includes(progName)
+                  : (formData.subjects || "").includes(progName);
+                return (
+                  <label
+                    key={progName}
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                      isChecked
+                        ? "bg-indigo-50 border-indigo-300 text-indigo-900"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleSubject(progName)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>{progName}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 
@@ -643,35 +720,23 @@ export default function TutorList() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Tarif Honor Dasar / Sesi (Rp) *
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="5000"
-                value={formData.fee_per_session}
-                onChange={(e) => setFormData({ ...formData, fee_per_session: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Status Keaktifan
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
-              >
-                <option value="active">Aktif Mengajar</option>
-                <option value="inactive">Nonaktif</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Tarif Honor Dasar (Bebas Input Nominal, Contoh: 5000, 7500, 50000) *
+            </label>
+            <input
+              type="number"
+              required
+              min="0"
+              step="any"
+              value={formData.fee_per_session}
+              onChange={(e) => setFormData({ ...formData, fee_per_session: e.target.value })}
+              placeholder="Contoh: 5000, 7500, 80000"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Nominal bebas tanpa batasan kelipatan (misal: fee per anak/sesi Rp 5.000 atau Rp 7.500). Untuk tarif beda per program, atur via tombol &quot;Kelola Tarif Honor&quot;.
+            </p>
           </div>
 
           <div>
@@ -776,9 +841,9 @@ export default function TutorList() {
                   onChange={(e) => setRateForm({ ...rateForm, program_name: e.target.value })}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold"
                 >
-                  {programsList.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
+                  {availablePrograms.map((pName) => (
+                    <option key={pName} value={pName}>
+                      {pName}
                     </option>
                   ))}
                 </select>
@@ -817,9 +882,10 @@ export default function TutorList() {
                   type="number"
                   required
                   min="0"
-                  step="5000"
+                  step="any"
                   value={rateForm.rate_per_session}
                   onChange={(e) => setRateForm({ ...rateForm, rate_per_session: e.target.value })}
+                  placeholder="Contoh: 5000, 7500, 75000"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold text-emerald-700"
                 />
               </div>
@@ -831,9 +897,10 @@ export default function TutorList() {
                 <input
                   type="number"
                   min="0"
-                  step="5000"
+                  step="any"
                   value={rateForm.transport_fee}
                   onChange={(e) => setRateForm({ ...rateForm, transport_fee: e.target.value })}
+                  placeholder="Contoh: 25000"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold text-purple-700"
                 />
               </div>
@@ -846,9 +913,9 @@ export default function TutorList() {
                   type="number"
                   min="30"
                   max="180"
-                  step="15"
+                  step="any"
                   value={rateForm.duration_minutes}
-                  onChange={(e) => setRateForm({ ...rateForm, duration_minutes: parseInt(e.target.value) })}
+                  onChange={(e) => setRateForm({ ...rateForm, duration_minutes: parseInt(e.target.value) || 90 })}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-bold"
                 />
               </div>

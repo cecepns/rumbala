@@ -266,7 +266,7 @@ export default function SettingsPage() {
                 <input
                   type="number"
                   min="0"
-                  step="5000"
+                  step="any"
                   value={settings.default_home_visit_transport}
                   onChange={(e) => setSettings({ ...settings, default_home_visit_transport: e.target.value })}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"

@@ -370,7 +370,7 @@ export default function ProgramMasterList() {
               <input
                 type="number"
                 min="0"
-                step="5000"
+                step="any"
                 value={formData.default_fee}
                 onChange={(e) => setFormData({ ...formData, default_fee: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
@@ -384,7 +384,7 @@ export default function ProgramMasterList() {
               <input
                 type="number"
                 min="0"
-                step="2500"
+                step="any"
                 value={formData.default_fee_per_session}
                 onChange={(e) => setFormData({ ...formData, default_fee_per_session: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
@@ -398,7 +398,7 @@ export default function ProgramMasterList() {
               <input
                 type="number"
                 min="0"
-                step="5000"
+                step="any"
                 value={formData.default_tutor_fee}
                 onChange={(e) => setFormData({ ...formData, default_tutor_fee: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"
