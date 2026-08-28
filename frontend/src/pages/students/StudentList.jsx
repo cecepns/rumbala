@@ -121,7 +121,13 @@ export default function StudentList() {
         if (res.success) {
           const list = res.data || [];
           const filtered = search
-            ? list.filter((s) => s.name?.toLowerCase().includes(search.toLowerCase()) || s.program_name?.toLowerCase().includes(search.toLowerCase()))
+            ? list.filter(
+                (s) =>
+                  s.name?.toLowerCase().includes(search.toLowerCase()) ||
+                  s.nickname?.toLowerCase().includes(search.toLowerCase()) ||
+                  s.program_name?.toLowerCase().includes(search.toLowerCase()) ||
+                  s.programs?.some((p) => p.program_name?.toLowerCase().includes(search.toLowerCase()))
+              )
             : list;
           setStudents(filtered);
           setTotal(filtered.length);
@@ -155,16 +161,22 @@ export default function StudentList() {
   }, [fetchStudents]);
 
   // Tutor: Open Learning Profile Modal
-  const handleOpenLearningProfile = (st) => {
-    setSelectedStudentForProfile(st);
+  const handleOpenLearningProfile = (st, prog) => {
+    const targetProg = prog || (st.programs && st.programs[0]) || {};
+    setSelectedStudentForProfile({
+      ...st,
+      program_id: targetProg.id,
+      program_name: targetProg.program_name || st.program_name || "Cermat Matematika",
+    });
     setLearningProfileForm({
-      program_name: st.program_name || "Cermat Matematika",
-      initial_level: st.initial_level || "",
-      strengths: st.strengths || "",
-      areas_for_improvement: st.areas_for_improvement || "",
-      learning_targets: st.learning_targets || "",
-      special_needs: st.special_needs || "",
-      important_notes: st.important_notes || st.notes || "",
+      program_id: targetProg.id || null,
+      program_name: targetProg.program_name || st.program_name || "Cermat Matematika",
+      initial_level: targetProg.initial_level || "",
+      strengths: targetProg.strengths || "",
+      areas_for_improvement: targetProg.areas_for_improvement || "",
+      learning_targets: targetProg.learning_targets || "",
+      special_needs: targetProg.special_needs || "",
+      important_notes: targetProg.important_notes || st.notes || "",
     });
   };
 
@@ -534,6 +546,15 @@ export default function StudentList() {
                             <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px]">
                               {prog.completed_sessions_month || 0}/{prog.package_sessions || 8} Sesi
                             </span>
+                            {role === "tutor" && (
+                              <button
+                                onClick={() => handleOpenLearningProfile(st, prog)}
+                                title="Update Catatan Belajar Program Ini"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 font-bold text-xs transition-colors cursor-pointer"
+                              >
+                                <FileEdit className="w-3.5 h-3.5" /> Catatan
+                              </button>
+                            )}
                             {role !== "tutor" && (
                               <button
                                 onClick={() => handleOpenEditProgram(st, prog)}
@@ -558,7 +579,9 @@ export default function StudentList() {
                     ))
                   ) : (
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
-                      Belum ada program aktif. Klik tombol "+ Ambil Program Lain" untuk menambahkan.
+                      {role === "tutor"
+                        ? "Belum ada program aktif yang ditugaskan ke Anda untuk siswa ini."
+                        : "Belum ada program aktif. Klik tombol \"+ Ambil Program Lain\" untuk menambahkan."}
                     </div>
                   )}
                 </div>
@@ -569,7 +592,7 @@ export default function StudentList() {
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-xs text-slate-500">Profil Pembelajaran: {st.initial_level || "Belum diisi"}</span>
                   <button
-                    onClick={() => handleOpenLearningProfile(st)}
+                    onClick={() => handleOpenLearningProfile(st, st.programs && st.programs[0])}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold transition-colors cursor-pointer"
                   >
                     <FileEdit className="w-3.5 h-3.5" />

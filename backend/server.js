@@ -787,23 +787,68 @@ app.get('/api/tutor/students', authenticateToken, async (req, res) => {
   try {
     let tutorId = req.user.tutor_id;
     if (!tutorId) {
-      const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? LIMIT 1', [req.user.id, req.user.email]);
-      tutorId = tutors.length > 0 ? tutors[0].id : 1;
+      const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? OR name = ? LIMIT 1', [req.user.id, req.user.email, req.user.name]);
+      tutorId = tutors.length > 0 ? tutors[0].id : null;
+    }
+
+    if (!tutorId) {
+      return res.json({ success: true, data: [] });
     }
 
     const [students] = await db.query(
       `SELECT DISTINCT 
-         s.id, s.name, s.nickname, s.class_grade, s.school, s.parent_name, s.notes, s.status,
-         sp.id as program_id, sp.program_name, sp.unit_name, 
-         COALESCE(sp.class_type, 'Semi Privat') as class_type,
-         sp.package_sessions, sp.completed_sessions_month, sp.schedule_info,
-         sp.initial_level, sp.strengths, sp.areas_for_improvement, sp.learning_targets, sp.special_needs, sp.important_notes
-       FROM student_programs sp
-       JOIN students s ON sp.student_id = s.id
-       WHERE sp.tutor_id = ? AND sp.status = 'active'
+         s.id, s.name, s.nickname, s.birth_date, s.parent_name, s.parent_phone, s.parent_email,
+         s.address, s.class_grade, s.school, s.subjects, s.tuition_fee_per_session, s.status, s.notes,
+         s.total_sessions_completed, s.unbilled_sessions_count, s.created_at, s.updated_at
+       FROM students s
+       WHERE s.id IN (
+         SELECT student_id FROM student_programs WHERE tutor_id = ? AND status = 'active'
+         UNION
+         SELECT student_id FROM schedules WHERE tutor_id = ? AND status = 'active'
+       )
        ORDER BY s.name ASC`,
-      [tutorId]
+      [tutorId, tutorId]
     );
+
+    // Attach all programs assigned to this tutor for each student
+    for (let s of students) {
+      let [programs] = await db.query(
+        `SELECT sp.*, t.name as tutor_name, t.phone as tutor_phone 
+         FROM student_programs sp 
+         LEFT JOIN tutors t ON sp.tutor_id = t.id 
+         WHERE sp.student_id = ? AND sp.tutor_id = ? AND sp.status = 'active'`,
+        [s.id, tutorId]
+      );
+
+      // If no specific programs explicitly tagged with tutor_id, fetch student's active programs
+      if (programs.length === 0) {
+        const [allPrograms] = await db.query(
+          `SELECT sp.*, t.name as tutor_name, t.phone as tutor_phone 
+           FROM student_programs sp 
+           LEFT JOIN tutors t ON sp.tutor_id = t.id 
+           WHERE sp.student_id = ? AND sp.status = 'active'`,
+          [s.id]
+        );
+        programs = allPrograms;
+      }
+
+      s.programs = programs;
+      if (programs.length > 0) {
+        s.program_id = programs[0].id;
+        s.program_name = programs[0].program_name;
+        s.unit_name = programs[0].unit_name;
+        s.class_type = programs[0].class_type;
+        s.package_sessions = programs[0].package_sessions;
+        s.completed_sessions_month = programs[0].completed_sessions_month;
+        s.schedule_info = programs[0].schedule_info;
+        s.initial_level = programs[0].initial_level;
+        s.strengths = programs[0].strengths;
+        s.areas_for_improvement = programs[0].areas_for_improvement;
+        s.learning_targets = programs[0].learning_targets;
+        s.special_needs = programs[0].special_needs;
+        s.important_notes = programs[0].important_notes;
+      }
+    }
 
     res.json({ success: true, data: students });
   } catch (error) {
@@ -868,21 +913,34 @@ app.get('/api/tutor/dashboard-summary', authenticateToken, async (req, res) => {
 app.put('/api/tutor/students/:id/learning-profile', authenticateToken, async (req, res) => {
   try {
     const studentId = req.params.id;
-    const { program_name, initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes } = req.body;
+    const { program_id, program_name, initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes } = req.body;
 
-    if (!program_name) {
-      return res.status(400).json({ success: false, message: 'Program wajib disertakan.' });
+    if (program_id) {
+      await db.query(
+        `UPDATE student_programs 
+         SET initial_level = ?, strengths = ?, areas_for_improvement = ?, learning_targets = ?, special_needs = ?, important_notes = ?
+         WHERE id = ?`,
+        [initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes, program_id]
+      );
+    } else if (program_name) {
+      await db.query(
+        `UPDATE student_programs 
+         SET initial_level = ?, strengths = ?, areas_for_improvement = ?, learning_targets = ?, special_needs = ?, important_notes = ?
+         WHERE student_id = ? AND program_name = ?`,
+        [initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes, studentId, program_name]
+      );
+    } else {
+      await db.query(
+        `UPDATE student_programs 
+         SET initial_level = ?, strengths = ?, areas_for_improvement = ?, learning_targets = ?, special_needs = ?, important_notes = ?
+         WHERE student_id = ?`,
+        [initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes, studentId]
+      );
     }
-
-    await db.query(
-      `UPDATE student_programs 
-       SET initial_level = ?, strengths = ?, areas_for_improvement = ?, learning_targets = ?, special_needs = ?, important_notes = ?
-       WHERE student_id = ? AND program_name = ?`,
-      [initial_level, strengths, areas_for_improvement, learning_targets, special_needs, important_notes, studentId, program_name]
-    );
 
     res.json({ success: true, message: 'Profil dan catatan belajar siswa berhasil diperbarui.' });
   } catch (error) {
+    console.error('Error updating learning profile:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
