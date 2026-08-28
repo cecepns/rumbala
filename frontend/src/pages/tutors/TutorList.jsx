@@ -24,12 +24,6 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-const AVAILABLE_UNITS = [
-  "Unit Riscon Rancaekek",
-  "Unit Panorama Jatinangor",
-  "Rumah Belajar Pusat"
-];
-
 const AVAILABLE_CLASS_TYPES = [
   "Semi Privat",
   "Privat di Tempat Les",
@@ -38,19 +32,10 @@ const AVAILABLE_CLASS_TYPES = [
   "Privat Home Visit"
 ];
 
-const DEFAULT_PROGRAM_OPTIONS = [
-  "Cermat Matematika",
-  "Prisma",
-  "English BEC",
-  "Calistung",
-  "Ngaji / Tahfidz",
-  "Bimbel Tematik SD",
-  "Sains & IPA"
-];
-
 export default function TutorList() {
   const [tutors, setTutors] = useState([]);
   const [programsList, setProgramsList] = useState([]);
+  const [unitsList, setUnitsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -66,8 +51,8 @@ export default function TutorList() {
     name: "",
     email: "",
     phone: "",
-    subjects: ["Cermat Matematika"],
-    units_teaching: ["Unit Riscon Rancaekek"],
+    subjects: [],
+    units_teaching: [],
     class_types: ["Semi Privat", "Privat di Tempat Les"],
     fee_per_session: 75000,
     status: "active",
@@ -80,7 +65,7 @@ export default function TutorList() {
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
   const [selectedTutorForRate, setSelectedTutorForRate] = useState(null);
   const [rateForm, setRateForm] = useState({
-    program_name: "Cermat Matematika",
+    program_name: "",
     class_type: "Semi Privat",
     duration_minutes: 90,
     rate_per_session: 75000,
@@ -92,17 +77,17 @@ export default function TutorList() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const availablePrograms = Array.from(
-    new Set([
-      ...programsList.map((p) => p.name).filter(Boolean),
-      ...DEFAULT_PROGRAM_OPTIONS
-    ])
-  );
+  const availablePrograms = programsList.map((p) => p.name).filter(Boolean);
+  const availableUnits = unitsList.map((u) => u.name).filter(Boolean);
 
   const fetchOptions = async () => {
     try {
-      const pRes = await request.get(API_ENDPOINTS.PROGRAMS.LIST);
+      const [pRes, uRes] = await Promise.all([
+        request.get(API_ENDPOINTS.PROGRAMS.LIST),
+        request.get(API_ENDPOINTS.UNITS.LIST)
+      ]);
       if (pRes.success) setProgramsList(pRes.data || []);
+      if (uRes.success) setUnitsList(uRes.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -143,8 +128,8 @@ export default function TutorList() {
       name: "",
       email: "",
       phone: "",
-      subjects: ["Cermat Matematika"],
-      units_teaching: ["Unit Riscon Rancaekek"],
+      subjects: programsList[0]?.name ? [programsList[0].name] : [],
+      units_teaching: unitsList[0]?.name ? [unitsList[0].name] : [],
       class_types: ["Semi Privat", "Privat di Tempat Les"],
       fee_per_session: 75000,
       status: "active",
@@ -158,13 +143,13 @@ export default function TutorList() {
     setEditingTutor(tutor);
     const unitsArr = tutor.units_teaching
       ? tutor.units_teaching.split(",").map((u) => u.trim()).filter(Boolean)
-      : ["Unit Riscon Rancaekek"];
+      : (unitsList[0]?.name ? [unitsList[0].name] : []);
     const classArr = tutor.class_types
       ? tutor.class_types.split(",").map((c) => c.trim()).filter(Boolean)
       : ["Semi Privat"];
     const subjectsArr = tutor.subjects
       ? tutor.subjects.split(",").map((s) => s.trim()).filter(Boolean)
-      : ["Cermat Matematika"];
+      : (programsList[0]?.name ? [programsList[0].name] : []);
 
     setFormData({
       name: tutor.name,
@@ -278,7 +263,7 @@ export default function TutorList() {
   const handleOpenManageRates = (tutor) => {
     setSelectedTutorForRate(tutor);
     setRateForm({
-      program_name: programsList[0]?.name || "Cermat Matematika",
+      program_name: programsList[0]?.name || availablePrograms[0] || "",
       class_type: "Semi Privat",
       duration_minutes: 90,
       rate_per_session: tutor.fee_per_session || 75000,
@@ -639,58 +624,73 @@ export default function TutorList() {
               </label>
               <span className="text-[11px] text-slate-400 font-medium">Bisa pilih lebih dari satu</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {availablePrograms.map((progName) => {
-                const isChecked = Array.isArray(formData.subjects)
-                  ? formData.subjects.includes(progName)
-                  : (formData.subjects || "").includes(progName);
-                return (
+            {availablePrograms.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availablePrograms.map((progName) => {
+                  const isChecked = Array.isArray(formData.subjects)
+                    ? formData.subjects.includes(progName)
+                    : (formData.subjects || "").includes(progName);
+                  return (
+                    <label
+                      key={progName}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                        isChecked
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-900"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSubject(progName)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>{progName}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-200">
+                Belum ada data program di Master Data. Silakan buat program di menu Data Program.
+              </p>
+            )}
+          </div>
+
+          {/* Unit Mengajar Checkboxes */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase">
+                Pilihan Unit Cabang Mengajar *
+              </label>
+              <span className="text-[11px] text-slate-400 font-medium">Bisa pilih lebih dari satu</span>
+            </div>
+            {availableUnits.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availableUnits.map((unit) => (
                   <label
-                    key={progName}
+                    key={unit}
                     className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-                      isChecked
-                        ? "bg-indigo-50 border-indigo-300 text-indigo-900"
+                      formData.units_teaching.includes(unit)
+                        ? "bg-primary-50 border-primary-300 text-primary-900"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70"
                     }`}
                   >
                     <input
                       type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleSubject(progName)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                      checked={formData.units_teaching.includes(unit)}
+                      onChange={() => toggleUnit(unit)}
+                      className="rounded text-primary-600 focus:ring-primary-500"
                     />
-                    <span>{progName}</span>
+                    <span>{unit}</span>
                   </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Unit Mengajar Checkboxes */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-              Pilihan Unit Cabang Mengajar *
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {AVAILABLE_UNITS.map((unit) => (
-                <label
-                  key={unit}
-                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-                    formData.units_teaching.includes(unit)
-                      ? "bg-primary-50 border-primary-300 text-primary-900"
-                      : "bg-slate-50 border-slate-200 text-slate-700"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.units_teaching.includes(unit)}
-                    onChange={() => toggleUnit(unit)}
-                    className="rounded text-primary-600 focus:ring-primary-500"
-                  />
-                  <span>{unit}</span>
-                </label>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-200">
+                Belum ada data unit di Master Data. Silakan buat unit di menu Unit Lokasi.
+              </p>
+            )}
           </div>
 
           {/* Class Types Checkboxes */}
