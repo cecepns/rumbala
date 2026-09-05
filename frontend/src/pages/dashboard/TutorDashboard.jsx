@@ -117,7 +117,7 @@ export default function TutorDashboard() {
           <div>
             <p className="text-[11px] font-bold text-slate-400 uppercase">Program yang Anda Ampu</p>
             <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
-              {summaryData?.programs?.join(" • ") || "Cermat Matematika • English BEC"}
+              {summaryData?.programs?.join(" • ") || "Pracalis • Cerdas Matematika"}
             </h4>
             <p className="text-xs text-indigo-600 font-semibold mt-0.5">Fokus Materi & Evaluasi Fleksibel</p>
           </div>

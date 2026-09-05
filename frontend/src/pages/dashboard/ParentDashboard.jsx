@@ -227,34 +227,28 @@ export default function ParentDashboard() {
             latestInvoice.items.map((item, idx) => (
               <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                 <p className="text-slate-400 font-semibold text-[11px]">{item.program_name}</p>
-                <p className="font-bold text-slate-800 mt-0.5 truncate">{item.description}</p>
-                <p className="font-extrabold text-primary-700 mt-1">{formatRupiah(item.amount)}</p>
+                <p className="font-bold text-slate-800 mt-0.5 truncate">{item.description || `${item.package || 8} Sesi/Bln`}</p>
+                <p className="font-extrabold text-primary-700 mt-1">{formatRupiah(item.fee || item.amount || 0)}</p>
+              </div>
+            ))
+          ) : programs && programs.length > 0 ? (
+            programs.map((p, idx) => (
+              <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                <p className="text-slate-400 font-semibold text-[11px]">{p.program_name}</p>
+                <p className="font-bold text-slate-800 mt-0.5 truncate">{p.package_sessions || 8} Sesi/Bln - {p.unit_name || "Unit"}</p>
+                <p className="font-extrabold text-primary-700 mt-1">{formatRupiah(p.monthly_fee)}</p>
               </div>
             ))
           ) : (
-            <>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <p className="text-slate-400 font-semibold text-[11px]">Cermat Matematika</p>
-                <p className="font-bold text-slate-800 mt-0.5">8 Sesi/Bulan - Unit Riscon</p>
-                <p className="font-extrabold text-primary-700 mt-1">Rp 350.000</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <p className="text-slate-400 font-semibold text-[11px]">English BEC</p>
-                <p className="font-bold text-slate-800 mt-0.5">4 Sesi/Bulan - Unit Riscon</p>
-                <p className="font-extrabold text-primary-700 mt-1">Rp 300.000</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                <p className="text-slate-400 font-semibold text-[11px]">Mengaji & Tahfidz</p>
-                <p className="font-bold text-slate-800 mt-0.5">8 Sesi/Bulan - Unit Panorama</p>
-                <p className="font-extrabold text-primary-700 mt-1">Rp 300.000</p>
-              </div>
-            </>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs col-span-3 text-slate-400">
+              Belum ada rincian tagihan program.
+            </div>
           )}
 
           <div className="p-3 rounded-xl bg-primary-50/70 border border-primary-100 text-xs flex flex-col justify-between">
             <p className="text-primary-800 font-bold uppercase text-[11px]">Total Tagihan SPP</p>
             <p className="text-lg font-black text-primary-800 mt-1">
-              {formatRupiah(latestInvoice?.amount || 950000)}
+              {formatRupiah(latestInvoice?.amount || programs.reduce((sum, p) => sum + parseFloat(p.monthly_fee || 0), 0))}
             </p>
             <Link
               to="/invoices"

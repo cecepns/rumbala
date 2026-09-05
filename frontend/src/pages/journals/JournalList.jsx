@@ -159,11 +159,14 @@ export default function JournalList() {
                 className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
               >
                 <option value="Semua Program">Semua Program</option>
-                <option value="Cermat Matematika">Cermat Matematika</option>
-                <option value="English BEC">English BEC</option>
-                <option value="Prisma Kalkulator Tangan">Prisma Kalkulator Tangan</option>
-                <option value="Mengaji & Tahsin">Mengaji & Tahsin</option>
-                <option value="Tahfidz Quran">Tahfidz Quran</option>
+                <option value="Pracalis">Pracalis</option>
+                <option value="Baca Tulis Abama">Baca Tulis Abama</option>
+                <option value="Hitung Prisma kalkulator tangan">Hitung Prisma kalkulator tangan</option>
+                <option value="Cerdas Matematika">Cerdas Matematika</option>
+                <option value="Bahasa inggris BEC">Bahasa inggris BEC</option>
+                <option value="Bahasa Arab ( mapel )">Bahasa Arab ( mapel )</option>
+                <option value="Mengaji metode umii & tilawati">Mengaji metode umii & tilawati</option>
+                <option value="Tahfidz">Tahfidz</option>
               </select>
             </div>
           )}

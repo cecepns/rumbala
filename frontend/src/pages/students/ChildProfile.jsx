@@ -49,6 +49,7 @@ export default function ChildProfile() {
   };
 
   const student = studentDetail || selectedChild;
+  const activePrograms = (student?.programs || []).filter((p) => p.status === "active" || !p.status);
 
   return (
     <div className="space-y-6">
@@ -131,7 +132,7 @@ export default function ChildProfile() {
               <div>
                 <p className="text-slate-400 text-[10px]">Pilihan Paket & Sesi Les</p>
                 <p className="font-bold text-slate-800">
-                  Paket {student?.programs?.[0]?.package_sessions || 8} Pertemuan / Bulan
+                  Paket {activePrograms[0]?.package_sessions || 8} Pertemuan / Bulan
                 </p>
                 <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
                   {student?.total_sessions_completed || 4} Sesi Terlaksana Bulan Ini
@@ -202,7 +203,7 @@ export default function ChildProfile() {
               <Sparkles className="w-4 h-4 text-amber-300" />
             </div>
             <h3 className="text-lg font-extrabold text-white mt-1">
-              {student?.programs?.length || 0} Program Aktif
+              {activePrograms.length} Program Aktif
             </h3>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
               Ananda terdaftar dalam program bimbingan komprehensif untuk penguatan akademik dan karakter.
@@ -210,7 +211,7 @@ export default function ChildProfile() {
           </div>
 
           <div className="space-y-2 pt-2 border-t border-white/10">
-            {student?.programs?.map((prog) => (
+            {activePrograms.map((prog) => (
               <div key={prog.id} className="p-2.5 rounded-xl bg-white/10 flex items-center justify-between text-xs">
                 <div>
                   <p className="font-bold text-white">{prog.program_name}</p>
@@ -241,8 +242,8 @@ export default function ChildProfile() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {student?.programs && student.programs.length > 0 ? (
-            student.programs.map((prog) => (
+          {activePrograms.length > 0 ? (
+            activePrograms.map((prog) => (
               <div
                 key={prog.id}
                 className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-primary-200 transition-all flex flex-col justify-between space-y-4"

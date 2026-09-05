@@ -38,7 +38,7 @@ export default function AIReportGenerator() {
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [generateForm, setGenerateForm] = useState({
     student_id: "",
-    program_name: "Cermat Matematika",
+    program_name: "Pracalis",
     report_type: "mid_period", // 'mid_period' (Evaluasi Tengah Periode) or 'final_period' (Evaluasi Akhir Periode)
     period: "Agustus 2026",
     // Rubric Fields for Flexible Evaluation
@@ -85,7 +85,7 @@ export default function AIReportGenerator() {
             setGenerateForm((prev) => ({
               ...prev,
               student_id: res.data[0].id,
-              program_name: res.data[0].program_name || "Cermat Matematika",
+              program_name: res.data[0].program_name || "Pracalis",
             }));
           }
         }
@@ -386,7 +386,7 @@ export default function AIReportGenerator() {
                   setGenerateForm({
                     ...generateForm,
                     student_id: e.target.value,
-                    program_name: st?.program_name || "Cermat Matematika",
+                    program_name: st?.programs?.[0]?.program_name || st?.program_name || "Pracalis",
                   });
                 }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
@@ -483,7 +483,7 @@ export default function AIReportGenerator() {
             )}
 
             {/* English Rubric */}
-            {generateForm.program_name.includes("English") && (
+            {(generateForm.program_name.includes("English") || generateForm.program_name.includes("inggris") || generateForm.program_name.includes("BEC")) && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Vocabulary</label>
@@ -548,8 +548,8 @@ export default function AIReportGenerator() {
               </div>
             )}
 
-            {/* Pracalis / Calistung Rubric */}
-            {generateForm.program_name.includes("Pracalis") && (
+            {/* Pracalis / Calistung / Abama Rubric */}
+            {(generateForm.program_name.includes("Pracalis") || generateForm.program_name.includes("Abama")) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Mengenal Huruf & Suku Kata</label>

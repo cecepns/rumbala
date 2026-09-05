@@ -437,7 +437,7 @@ export default function TutorList() {
                       Program & Keahlian:
                     </span>
                     <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-xs">
-                      {tutor.subjects || "Cermat Matematika"}
+                      {tutor.subjects || "Pracalis, Cerdas Matematika"}
                     </span>
                   </div>
 
@@ -516,9 +516,9 @@ export default function TutorList() {
                     </div>
                   ) : (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-500">Tarif Standar (Default):</span>
+                      <span className="text-slate-500">Struktur Honor:</span>
                       <span className="font-extrabold text-emerald-700">
-                        {formatRupiah(tutor.fee_per_session)}/sesi
+                        Otomatis Master Program & Jenis Kelas
                       </span>
                     </div>
                   )}
@@ -720,24 +720,6 @@ export default function TutorList() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Tarif Honor Dasar (Bebas Input Nominal, Contoh: 5000, 7500, 50000) *
-            </label>
-            <input
-              type="number"
-              required
-              min="0"
-              step="any"
-              value={formData.fee_per_session}
-              onChange={(e) => setFormData({ ...formData, fee_per_session: e.target.value })}
-              placeholder="Contoh: 5000, 7500, 80000"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-emerald-700"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Nominal bebas tanpa batasan kelipatan (misal: fee per anak/sesi Rp 5.000 atau Rp 7.500). Untuk tarif beda per program, atur via tombol &quot;Kelola Tarif Honor&quot;.
-            </p>
-          </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">

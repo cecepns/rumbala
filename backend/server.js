@@ -752,6 +752,18 @@ app.get('/api/parent/summary', authenticateToken, async (req, res) => {
       [sId]
     );
 
+    const parsedInvoices = invoices.map(inv => {
+      let items = [];
+      if (inv.items_json) {
+        try {
+          items = typeof inv.items_json === 'string' ? JSON.parse(inv.items_json) : inv.items_json;
+        } catch (e) {
+          items = [];
+        }
+      }
+      return { ...inv, items };
+    });
+
     const [aiReports] = await db.query(
       `SELECT r.*, t.name as tutor_name 
        FROM ai_reports r 
@@ -764,12 +776,15 @@ app.get('/api/parent/summary', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       data: {
+        student: { id: sId },
         active_program: activeProg,
+        programs: progList,
         available_programs: progList,
         attendance_stats: attendanceRows,
         recent_journals: lastJournals,
         upcoming_schedules: schedules,
-        recent_invoices: invoices,
+        recent_invoices: parsedInvoices,
+        latestInvoice: parsedInvoices[0] || null,
         latest_ai_reports: aiReports
       }
     });
@@ -1206,7 +1221,7 @@ app.post('/api/students', authenticateToken, requireRole('admin'), async (req, r
     const [result] = await db.query(
       `INSERT INTO students (user_id, name, nickname, birth_date, parent_name, parent_phone, parent_email, address, class_grade, school, subjects, tuition_fee_per_session, status, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [parentUserId, name, nickname || '', birth_date || null, parent_name, parent_phone, parent_email || '', address || '', class_grade || 'SD', school || '', subjects || 'Cermat Matematika', tuition_fee_per_session || 100000, status || 'active', notes || '']
+      [parentUserId, name, nickname || '', birth_date || null, parent_name, parent_phone, parent_email || '', address || '', class_grade || 'SD', school || '', subjects || 'Pracalis', tuition_fee_per_session || 100000, status || 'active', notes || '']
     );
     const studentId = result.insertId;
 
@@ -1216,14 +1231,14 @@ app.post('/api/students', authenticateToken, requireRole('admin'), async (req, r
         await db.query(
           `INSERT INTO student_programs (student_id, program_name, unit_name, class_type, tutor_id, package_sessions, monthly_fee, schedule_info, status)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-          [studentId, p.program_name, p.unit_name || 'Unit Riscon Rancaekek', p.class_type || 'Semi Privat', p.tutor_id || null, p.package_sessions || 8, p.monthly_fee || 350000, p.schedule_info || '']
+          [studentId, p.program_name, p.unit_name || 'Unit Riscon Rancaekek', p.class_type || 'Semi Privat', p.tutor_id || null, p.package_sessions || 8, p.monthly_fee || 300000, p.schedule_info || '']
         );
       }
     } else {
       // Default initial program
       await db.query(
         `INSERT INTO student_programs (student_id, program_name, unit_name, class_type, tutor_id, package_sessions, monthly_fee, schedule_info, status)
-         VALUES (?, 'Cermat Matematika', 'Unit Riscon Rancaekek', 'Semi Privat', 1, 8, 350000.00, 'Senin & Rabu 15:30 - 17:00', 'active')`,
+         VALUES (?, 'Pracalis', 'Unit Riscon Rancaekek', 'Semi Privat', 1, 8, 300000.00, 'Senin & Rabu 15:30 - 17:00', 'active')`,
         [studentId]
       );
     }
@@ -1393,7 +1408,7 @@ app.post('/api/tutors', authenticateToken, requireRole('admin'), async (req, res
     const [result] = await db.query(
       `INSERT INTO tutors (user_id, name, email, phone, subjects, units_teaching, class_types, fee_per_session, bio, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tutorUserId, name, email || '', phone, subjects || 'Cermat Matematika', units_teaching || 'Unit Riscon Rancaekek', class_types || 'Semi Privat, Privat di Tempat Les', fee_per_session || 75000, bio || '', status || 'active']
+      [tutorUserId, name, email || '', phone, subjects || 'Pracalis', units_teaching || 'Unit Riscon Rancaekek', class_types || 'Semi Privat, Privat di Tempat Les', fee_per_session || 75000, bio || '', status || 'active']
     );
     const tutorId = result.insertId;
 
@@ -1418,7 +1433,7 @@ app.put('/api/tutors/:id', authenticateToken, requireRole('admin'), async (req, 
   try {
     const { name, email, phone, subjects, units_teaching, class_types, fee_per_session, status, bio, rates } = req.body;
     await db.query(
-      `UPDATE tutors SET name=?, email=?, phone=?, subjects=?, units_teaching=?, class_types=?, fee_per_session=?, status=?, bio=? WHERE id=?`,
+      `UPDATE tutors SET name=?, email=?, phone=?, subjects=?, units_teaching=?, class_types=?, fee_per_session=COALESCE(?, fee_per_session, 75000), status=?, bio=? WHERE id=?`,
       [name, email, phone, subjects, units_teaching, class_types, fee_per_session, status, bio, req.params.id]
     );
 
@@ -2130,7 +2145,18 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
 
     query += ' ORDER BY inv.id DESC';
     const [rows] = await db.query(query, params);
-    res.json({ success: true, data: rows });
+    const parsedRows = rows.map(inv => {
+      let items = [];
+      if (inv.items_json) {
+        try {
+          items = typeof inv.items_json === 'string' ? JSON.parse(inv.items_json) : inv.items_json;
+        } catch (e) {
+          items = [];
+        }
+      }
+      return { ...inv, items };
+    });
+    res.json({ success: true, data: parsedRows });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -2144,7 +2170,16 @@ app.get('/api/invoices/:id', authenticateToken, async (req, res) => {
       [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ success: false, message: 'Tagihan tidak ditemukan.' });
-    res.json({ success: true, data: rows[0] });
+    const inv = rows[0];
+    let items = [];
+    if (inv.items_json) {
+      try {
+        items = typeof inv.items_json === 'string' ? JSON.parse(inv.items_json) : inv.items_json;
+      } catch (e) {
+        items = [];
+      }
+    }
+    res.json({ success: true, data: { ...inv, items } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -2157,32 +2192,52 @@ app.post('/api/invoices/generate-monthly', authenticateToken, requireRole('admin
       return res.status(400).json({ success: false, message: 'Siswa dan Periode Bulan wajib dipilih.' });
     }
 
-    const [programs] = await db.query('SELECT * FROM student_programs WHERE student_id = ? AND status = "active"', [student_id]);
-    if (programs.length === 0) {
-      return res.status(400).json({ success: false, message: 'Siswa tidak memiliki program bimbingan aktif.' });
+    let targetStudentIds = [];
+    if (student_id === 'all') {
+      const [allStudents] = await db.query('SELECT id FROM students WHERE status = "active"');
+      targetStudentIds = allStudents.map(s => s.id);
+    } else {
+      targetStudentIds = [student_id];
     }
 
-    const totalAmount = programs.reduce((sum, p) => sum + parseFloat(p.monthly_fee), 0);
-    const totalSessions = programs.reduce((sum, p) => sum + parseInt(p.package_sessions), 0);
-    const completedSessions = programs.reduce((sum, p) => sum + parseInt(p.completed_sessions_month || 0), 0);
+    if (targetStudentIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada data siswa aktif yang ditemukan.' });
+    }
 
-    const invoiceNumber = `INV/RBL/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(Math.floor(100 + Math.random() * 900))}`;
+    let generatedCount = 0;
+    for (const sId of targetStudentIds) {
+      const [programs] = await db.query('SELECT * FROM student_programs WHERE student_id = ? AND status = "active"', [sId]);
+      if (programs.length === 0) continue;
 
-    const items = programs.map(p => ({
-      program_name: p.program_name,
-      unit_name: p.unit_name,
-      class_type: p.class_type,
-      package: p.package_sessions,
-      fee: parseFloat(p.monthly_fee)
-    }));
+      const totalAmount = programs.reduce((sum, p) => sum + parseFloat(p.monthly_fee), 0);
+      const totalSessions = programs.reduce((sum, p) => sum + parseInt(p.package_sessions), 0);
+      const completedSessions = programs.reduce((sum, p) => sum + parseInt(p.completed_sessions_month || 0), 0);
 
-    const [invRes] = await db.query(
-      `INSERT INTO invoices (invoice_number, student_id, period_month, amount, package_sessions, sessions_completed, status, due_date, notes, items_json)
-       VALUES (?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?)`,
-      [invoiceNumber, student_id, period_month, totalAmount, totalSessions, completedSessions, due_date || '2026-08-10', notes || `Tagihan SPP ${period_month}`, JSON.stringify(items)]
-    );
+      const invoiceNumber = `INV/RBL/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}/${String(Math.floor(100 + Math.random() * 900))}`;
 
-    res.status(201).json({ success: true, message: 'Tagihan SPP Bulanan berhasil diterbitkan.', invoice_id: invRes.insertId });
+      const items = programs.map(p => ({
+        program_name: p.program_name,
+        unit_name: p.unit_name,
+        class_type: p.class_type,
+        package: p.package_sessions,
+        fee: parseFloat(p.monthly_fee),
+        amount: parseFloat(p.monthly_fee),
+        description: `${p.package_sessions} Sesi/Bln - ${p.unit_name} (${p.class_type})`
+      }));
+
+      await db.query(
+        `INSERT INTO invoices (invoice_number, student_id, period_month, amount, package_sessions, sessions_completed, status, due_date, notes, items_json)
+         VALUES (?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?)`,
+        [invoiceNumber, sId, period_month, totalAmount, totalSessions, completedSessions, due_date || '2026-08-10', notes || `Tagihan SPP ${period_month}`, JSON.stringify(items)]
+      );
+      generatedCount++;
+    }
+
+    if (generatedCount === 0) {
+      return res.status(400).json({ success: false, message: 'Siswa yang dipilih tidak memiliki program bimbingan aktif.' });
+    }
+
+    res.status(201).json({ success: true, message: `Berhasil menerbitkan ${generatedCount} tagihan SPP Bulanan.` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -193,7 +193,7 @@ export default function TutorRecapList() {
 
                       <td className="py-3.5 px-4">
                         <span className="inline-block px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 font-semibold text-[11px]">
-                          {recap.subjects || "Cermat Matematika"}
+                          {recap.subjects || "Pracalis"}
                         </span>
                       </td>
 

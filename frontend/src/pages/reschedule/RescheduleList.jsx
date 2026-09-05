@@ -38,7 +38,7 @@ export default function RescheduleList() {
   const [schedulesOptions, setSchedulesOptions] = useState([]);
   const [formData, setFormData] = useState({
     student_id: "",
-    program_name: "Cermat Matematika",
+    program_name: "Pracalis",
     unit_name: "Unit Riscon Rancaekek",
     class_type: "Semi Privat",
     schedule_id: "",
@@ -94,7 +94,7 @@ export default function RescheduleList() {
             setFormData((prev) => ({
               ...prev,
               student_id: selectedChildId || res.data[0].id,
-              program_name: res.data[0].programs?.[0]?.program_name || "Cermat Matematika",
+              program_name: res.data[0].programs?.[0]?.program_name || "Pracalis",
               unit_name: res.data[0].programs?.[0]?.unit_name || "Unit Riscon Rancaekek",
               class_type: res.data[0].programs?.[0]?.class_type || "Semi Privat"
             }));
@@ -126,7 +126,7 @@ export default function RescheduleList() {
     const prog = activeChild?.programs?.[0] || activeChild;
     setFormData({
       student_id: sId,
-      program_name: prog?.program_name || "Cermat Matematika",
+      program_name: prog?.program_name || "Pracalis",
       unit_name: prog?.unit_name || "Unit Riscon Rancaekek",
       class_type: prog?.class_type || "Semi Privat",
       schedule_id: "",

@@ -306,7 +306,7 @@ export default function ProgramMasterList() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Contoh: Cermat Matematika"
+                placeholder="Contoh: Cerdas Matematika"
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
@@ -352,12 +352,12 @@ export default function ProgramMasterList() {
                 onChange={(e) => setFormData({ ...formData, evaluation_type: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold"
               >
-                <option value="math">Matematika (Konsep, Ketelitian, Problem Solving)</option>
-                <option value="english">English BEC (Vocabulary, Grammar, Reading, Speaking)</option>
-                <option value="prisma">Prisma Kalkulator Tangan (Kecepatan, Ketepatan, Koordinasi)</option>
-                <option value="mengaji">Mengaji & Tahsin (Makhraj, Kelancaran, Tajwid)</option>
-                <option value="tahfidz">Tahfidz Quran (Hafalan, Murojaah, Mutqin)</option>
-                <option value="general">Umum / Standard Akademik</option>
+                <option value="math">Cerdas Matematika (Konsep, Ketelitian, Problem Solving)</option>
+                <option value="english">Bahasa inggris BEC (Vocabulary, Grammar, Reading, Speaking)</option>
+                <option value="prisma">Hitung Prisma kalkulator tangan (Kecepatan, Ketepatan, Koordinasi)</option>
+                <option value="mengaji">Mengaji metode umii & tilawati (Makhraj, Kelancaran, Tajwid)</option>
+                <option value="tahfidz">Tahfidz (Hafalan, Murojaah, Mutqin)</option>
+                <option value="general">Umum / Standard (Pracalis, Baca Tulis Abama, Bahasa Arab)</option>
               </select>
             </div>
           </div>

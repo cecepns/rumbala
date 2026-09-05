@@ -72,7 +72,7 @@ export default function StudentList() {
     address: "",
     class_grade: "Kelas 5 SD",
     school: "",
-    subjects: "Cermat Matematika",
+    subjects: "Pracalis",
     tuition_fee_per_session: 100000,
     status: "active",
     notes: ""
@@ -84,12 +84,12 @@ export default function StudentList() {
   const [selectedStudentForProgram, setSelectedStudentForProgram] = useState(null);
   const [editingProgramItem, setEditingProgramItem] = useState(null);
   const [programFormData, setProgramFormData] = useState({
-    program_name: "Cermat Matematika",
+    program_name: "Pracalis",
     unit_name: "Unit Riscon Rancaekek",
     class_type: "Semi Privat",
     tutor_id: "",
     package_sessions: 8,
-    monthly_fee: 350000,
+    monthly_fee: 300000,
     schedule_info: "",
     status: "active"
   });
@@ -166,11 +166,11 @@ export default function StudentList() {
     setSelectedStudentForProfile({
       ...st,
       program_id: targetProg.id,
-      program_name: targetProg.program_name || st.program_name || "Cermat Matematika",
+      program_name: targetProg.program_name || st.program_name || "Pracalis",
     });
     setLearningProfileForm({
       program_id: targetProg.id || null,
-      program_name: targetProg.program_name || st.program_name || "Cermat Matematika",
+      program_name: targetProg.program_name || st.program_name || "Pracalis",
       initial_level: targetProg.initial_level || "",
       strengths: targetProg.strengths || "",
       areas_for_improvement: targetProg.areas_for_improvement || "",
@@ -212,9 +212,9 @@ export default function StudentList() {
       parent_phone: "",
       parent_email: "",
       address: "",
-      class_grade: "Kelas 5 SD",
+      class_grade: "Kelas 1 SD",
       school: "",
-      subjects: "Cermat Matematika",
+      subjects: "Pracalis",
       tuition_fee_per_session: 100000,
       status: "active",
       notes: ""
@@ -234,7 +234,7 @@ export default function StudentList() {
       address: st.address || "",
       class_grade: st.class_grade,
       school: st.school,
-      subjects: st.subjects || "Cermat Matematika",
+      subjects: st.subjects || "Pracalis",
       tuition_fee_per_session: st.tuition_fee_per_session || 100000,
       status: st.status || "active",
       notes: st.notes || ""
@@ -289,14 +289,15 @@ export default function StudentList() {
   const handleOpenAddProgram = (student) => {
     setSelectedStudentForStudent(student);
     setEditingProgramItem(null);
+    const initialProg = programsList[0] || {};
     setProgramFormData({
       student_id: student.id,
-      program_name: programsList[0]?.name || "Cermat Matematika",
+      program_name: initialProg.name || "Pracalis",
       unit_name: units[0]?.name || "Unit Riscon Rancaekek",
       class_type: "Semi Privat",
       tutor_id: tutors[0]?.id || "",
       package_sessions: 8,
-      monthly_fee: programsList[0]?.default_fee || 350000,
+      monthly_fee: initialProg.default_fee || 300000,
       schedule_info: "",
       status: "active"
     });
@@ -310,14 +311,21 @@ export default function StudentList() {
   const handleOpenEditProgram = (student, progItem) => {
     setSelectedStudentForProgram(student);
     setEditingProgramItem(progItem);
+
+    // Find matching program in master program list (case-insensitive fallback)
+    const matchedMaster = programsList.find((p) => p.name.trim().toLowerCase() === (progItem.program_name || "").trim().toLowerCase())
+      || programsList.find((p) => p.name === progItem.program_name);
+
+    const exactName = matchedMaster ? matchedMaster.name : (progItem.program_name || programsList[0]?.name || "Pracalis");
+
     setProgramFormData({
       student_id: student.id,
-      program_name: progItem.program_name,
-      unit_name: progItem.unit_name || "Unit Riscon Rancaekek",
+      program_name: exactName,
+      unit_name: progItem.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
       class_type: progItem.class_type || "Semi Privat",
       tutor_id: progItem.tutor_id || "",
       package_sessions: progItem.package_sessions || 8,
-      monthly_fee: progItem.monthly_fee || 350000,
+      monthly_fee: progItem.monthly_fee || matchedMaster?.default_fee || 300000,
       schedule_info: progItem.schedule_info || "",
       status: progItem.status || "active"
     });

@@ -41,7 +41,7 @@ export default function TutorProfile() {
 
   const tutor = tutorData || {
     name: user?.name || "Sarah Azzahra, S.Pd",
-    subjects: "Cermat Matematika, Mengaji & Tahfidz",
+    subjects: "Pracalis, Cerdas Matematika",
     units_teaching: "Unit Riscon Rancaekek, Unit Panorama Jatinangor",
     class_types: "Semi Privat, Privat, Online Privat, Online semi Privat, Privat Home Visit",
     status: "active",

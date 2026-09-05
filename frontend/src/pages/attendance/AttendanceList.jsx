@@ -51,7 +51,7 @@ export default function AttendanceList() {
   const [formData, setFormData] = useState({
     student_id: "",
     tutor_id: "",
-    program_name: "Cermat Matematika",
+    program_name: "Pracalis",
     unit_name: "Unit Riscon Rancaekek",
     class_type: "Semi Privat",
     is_home_visit: 0,
@@ -140,7 +140,7 @@ export default function AttendanceList() {
     setFormData({
       student_id: firstStudent?.id || "",
       tutor_id: user?.tutor_id || firstStudent?.tutor_id || tutors[0]?.id || "",
-      program_name: initialProg?.program_name || programs[0]?.name || "Cermat Matematika",
+      program_name: initialProg?.program_name || programs[0]?.name || "Pracalis",
       unit_name: initialProg?.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
       class_type: initialProg?.class_type || "Semi Privat",
       is_home_visit: initialProg?.class_type === "Privat Home Visit" ? 1 : 0,
