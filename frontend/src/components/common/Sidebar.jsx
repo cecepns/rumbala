@@ -33,9 +33,7 @@ export default function Sidebar({ isOpen, onClose }) {
   if (role === "parent") {
     navigation = [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { name: "Jadwal Les", href: "/schedules", icon: CalendarDays },
       { name: "Riwayat Kehadiran", href: "/attendance", icon: CheckSquare },
-      { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock, badge: "Baru" },
       { name: "Jurnal Belajar", href: "/journals", icon: BookOpenCheck },
       { name: "Progress & Capaian", href: "/progress", icon: TrendingUp },
       { name: "Laporan Perkembangan", href: "/ai-reports", icon: Sparkles, badge: "Rapor" },
@@ -48,7 +46,6 @@ export default function Sidebar({ isOpen, onClose }) {
       { name: "Jadwal Mengajar", href: "/schedules", icon: CalendarDays },
       { name: "Siswa Saya", href: "/students", icon: Users },
       { name: "Absensi", href: "/attendance", icon: CheckSquare },
-      { name: "Izin / Reschedule", href: "/reschedule", icon: CalendarClock },
       { name: "Jurnal Mengajar", href: "/journals", icon: BookOpenCheck },
       { name: "Progress Belajar", href: "/progress", icon: TrendingUp },
       { name: "Generate Laporan AI", href: "/ai-reports", icon: Sparkles, badge: "AI" },

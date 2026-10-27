@@ -45,6 +45,9 @@ export default function StudentList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("all"); // 'all' (total keseluruhan) or 'unit' (per unit)
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [sortOption, setSortOption] = useState("name_asc"); // 'name_asc', 'name_desc', 'newest'
 
   // Tutor: Edit Learning Profile Modal
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState(null);
@@ -106,7 +109,12 @@ export default function StudentList() {
         request.get(API_ENDPOINTS.PROGRAMS.LIST)
       ]);
       if (tRes.success) setTutors(tRes.data || []);
-      if (uRes.success) setUnits(uRes.data || []);
+      if (uRes.success) {
+        setUnits(uRes.data || []);
+        if (uRes.data && uRes.data.length > 0 && !selectedUnit) {
+          setSelectedUnit(uRes.data[0].name);
+        }
+      }
       if (pRes.success) setProgramsList(pRes.data || []);
     } catch (err) {
       console.error(err);
@@ -119,26 +127,40 @@ export default function StudentList() {
       if (role === "tutor") {
         const res = await request.get(API_ENDPOINTS.TUTOR_STUDENTS.LIST);
         if (res.success) {
-          const list = res.data || [];
-          const filtered = search
-            ? list.filter(
-                (s) =>
-                  s.name?.toLowerCase().includes(search.toLowerCase()) ||
-                  s.nickname?.toLowerCase().includes(search.toLowerCase()) ||
-                  s.program_name?.toLowerCase().includes(search.toLowerCase()) ||
-                  s.programs?.some((p) => p.program_name?.toLowerCase().includes(search.toLowerCase()))
-              )
-            : list;
-          setStudents(filtered);
-          setTotal(filtered.length);
+          let list = res.data || [];
+          if (search) {
+            list = list.filter(
+              (s) =>
+                s.name?.toLowerCase().includes(search.toLowerCase()) ||
+                s.nickname?.toLowerCase().includes(search.toLowerCase()) ||
+                s.program_name?.toLowerCase().includes(search.toLowerCase()) ||
+                s.programs?.some((p) => p.program_name?.toLowerCase().includes(search.toLowerCase()))
+            );
+          }
+          if (viewMode === "unit" && selectedUnit) {
+            list = list.filter((s) => s.unit_name === selectedUnit || s.programs?.some(p => p.unit_name === selectedUnit));
+          }
+          // Sort
+          if (sortOption === "name_asc") {
+            list.sort((a, b) => a.name.localeCompare(b.name));
+          } else if (sortOption === "name_desc") {
+            list.sort((a, b) => b.name.localeCompare(a.name));
+          }
+          setStudents(list);
+          setTotal(list.length);
           setTotalPages(1);
         }
       } else {
-        const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, {
+        const params = {
           page,
           limit,
-          search
-        });
+          search,
+          sort: sortOption
+        };
+        if (viewMode === "unit" && selectedUnit) {
+          params.unit_name = selectedUnit;
+        }
+        const res = await request.get(API_ENDPOINTS.STUDENTS.LIST, params);
         if (res.success) {
           setStudents(res.data || []);
           setTotal(res.pagination?.total || 0);
@@ -150,7 +172,7 @@ export default function StudentList() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, role]);
+  }, [page, limit, search, role, viewMode, selectedUnit, sortOption]);
 
   useEffect(() => {
     fetchOptions();
@@ -403,19 +425,96 @@ export default function StudentList() {
         )}
       </div>
 
-      {/* Filter & Search */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+      {/* Opsi Tampilan: Total Keseluruhan vs Per Unit */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("all");
+              setSelectedUnit("");
+              setPage(1);
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === "all"
+                ? "bg-white text-primary-700 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            📋 Total Keseluruhan
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("unit");
+              if (!selectedUnit && units.length > 0) setSelectedUnit(units[0].name);
+              setPage(1);
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === "unit"
+                ? "bg-white text-primary-700 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            🏢 Per Unit Cabang
+          </button>
+        </div>
+
+        {/* Pilihan Unit Cabang jika mode Per Unit */}
+        {viewMode === "unit" && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            {units.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => {
+                  setSelectedUnit(u.name);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedUnit === u.name
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {u.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Filter, Search & Alphabetical Sorting */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <DebouncedSearch
           placeholder="Cari nama siswa, orang tua, sekolah, no WA..."
           onSearch={(val) => {
             setSearch(val);
             setPage(1);
           }}
-          className="w-full sm:w-96"
+          className="w-full md:w-80"
         />
 
-        <div className="text-xs font-semibold text-slate-500">
-          Total: <strong className="text-slate-800">{total}</strong> Siswa Terdata
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Urutkan:</span>
+            <select
+              value={sortOption}
+              onChange={(e) => {
+                setSortOption(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="name_asc">Abjad Nama (A - Z)</option>
+              <option value="name_desc">Abjad Nama (Z - A)</option>
+              <option value="newest">Pendaftaran Terbaru</option>
+            </select>
+          </div>
+
+          <div className="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+            Total: <strong className="text-slate-800">{total}</strong> Siswa {viewMode === "unit" && selectedUnit ? `(${selectedUnit})` : ""}
+          </div>
         </div>
       </div>
 

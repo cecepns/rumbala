@@ -19,7 +19,8 @@ import {
   MapPin,
   CalendarClock,
   Award,
-  AlertCircle
+  AlertCircle,
+  CheckSquare
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -102,11 +103,11 @@ export default function ParentDashboard() {
               Lihat Progress & Capaian
             </Link>
             <Link
-              to="/reschedule"
+              to="/attendance"
               className="px-4 py-2 rounded-xl bg-sky-400 text-sky-950 text-xs font-bold hover:bg-sky-300 transition-colors shadow-sm flex items-center gap-1.5"
             >
-              <CalendarClock className="w-3.5 h-3.5" />
-              Ajukan Izin / Reschedule
+              <CheckSquare className="w-3.5 h-3.5" />
+              Riwayat Kehadiran
             </Link>
             <Link
               to="/invoices"
@@ -295,10 +296,10 @@ export default function ParentDashboard() {
               <p className="text-xs text-slate-500">Waktu, unit, dan tutor bimbingan ananda</p>
             </div>
             <Link
-              to="/schedules"
+              to="/attendance"
               className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1"
             >
-              Lihat Semua <ArrowUpRight className="w-3.5 h-3.5" />
+              Lihat Kehadiran <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 

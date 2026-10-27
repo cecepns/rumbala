@@ -1087,6 +1087,7 @@ app.get('/api/students', authenticateToken, async (req, res) => {
     const status = req.query.status || '';
     const program_name = req.query.program_name || '';
     const unit_name = req.query.unit_name || '';
+    const sort = req.query.sort || 'newest';
     const offset = (page - 1) * limit;
 
     let whereClause = 'WHERE 1=1';
@@ -1101,10 +1102,25 @@ app.get('/api/students', authenticateToken, async (req, res) => {
       whereClause += ' AND s.status = ?';
       queryParams.push(status);
     }
+    if (unit_name && unit_name !== 'all' && unit_name !== 'Semua Unit') {
+      whereClause += ' AND EXISTS (SELECT 1 FROM student_programs sp WHERE sp.student_id = s.id AND sp.unit_name = ?)';
+      queryParams.push(unit_name);
+    }
+    if (program_name && program_name !== 'Semua Program') {
+      whereClause += ' AND EXISTS (SELECT 1 FROM student_programs sp WHERE sp.student_id = s.id AND sp.program_name = ?)';
+      queryParams.push(program_name);
+    }
 
     const [countRows] = await db.query(`SELECT COUNT(DISTINCT s.id) as total FROM students s ${whereClause}`, queryParams);
     const total = countRows[0].total;
     const totalPages = Math.ceil(total / limit) || 1;
+
+    let orderBy = 's.id DESC';
+    if (sort === 'name_asc' || sort === 'asc') {
+      orderBy = 's.name ASC';
+    } else if (sort === 'name_desc' || sort === 'desc') {
+      orderBy = 's.name DESC';
+    }
 
     const [rows] = await db.query(
       `SELECT s.*, u.username as parent_username, u.email as parent_user_email 
@@ -1112,11 +1128,11 @@ app.get('/api/students', authenticateToken, async (req, res) => {
        LEFT JOIN users u ON (u.id = s.user_id OR (u.role = 'parent' AND s.parent_phone = u.phone AND u.phone IS NOT NULL AND u.phone != ''))
        ${whereClause} 
        GROUP BY s.id
-       ORDER BY s.id DESC LIMIT ? OFFSET ?`,
+       ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       [...queryParams, limit, offset]
     );
 
-    // Attach all student programs for each student
+    // Attach all student programs for each student & populate default class_type / unit_name
     for (let s of rows) {
       const [programs] = await db.query(
         `SELECT sp.*, t.name as tutor_name, t.phone as tutor_phone 
@@ -1126,6 +1142,17 @@ app.get('/api/students', authenticateToken, async (req, res) => {
         [s.id]
       );
       s.programs = programs;
+      if (programs.length > 0) {
+        s.class_type = programs[0].class_type;
+        s.unit_name = programs[0].unit_name;
+        s.program_name = programs[0].program_name;
+        s.is_home_visit = programs.some(p => p.class_type === 'Privat Home Visit') ? 1 : 0;
+      } else {
+        s.class_type = 'Semi Privat';
+        s.unit_name = 'Unit Riscon Rancaekek';
+        s.program_name = s.subjects?.split(',')[0]?.trim() || 'Pracalis';
+        s.is_home_visit = 0;
+      }
     }
 
     res.json({
@@ -1389,20 +1416,33 @@ app.post('/api/tutors', authenticateToken, requireRole('admin'), async (req, res
 
     let tutorUserId = null;
 
-    if (create_tutor_account || (tutor_username && tutor_password)) {
-      const uname = (tutor_username || `tutor.${name.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '')}`).trim();
-      const uemail = (email || `${uname}@rumbala.com`).trim();
+    // Check if user already exists with this phone or email
+    const [existingUsers] = await db.query(
+      'SELECT id, username, email FROM users WHERE phone = ? OR (email = ? AND email != "")',
+      [phone.trim(), (email || '').trim()]
+    );
+
+    if (existingUsers.length > 0) {
+      tutorUserId = existingUsers[0].id;
+    } else {
+      // Automatically create login account for tutor so admin doesn't need to fill it twice
+      const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const baseUname = (tutor_username || `tutor.${cleanName}`).trim();
+      let uname = baseUname;
+      const uemail = (email && email.trim()) ? email.trim() : `${uname}@rumbala.com`;
       const rawPass = tutor_password && tutor_password.trim() ? tutor_password.trim() : 'password123';
 
       const [dup] = await db.query('SELECT id FROM users WHERE username = ? OR email = ?', [uname, uemail]);
-      if (dup.length === 0) {
-        const hashed = await bcrypt.hash(rawPass, 10);
-        const [uRes] = await db.query(
-          `INSERT INTO users (name, username, email, password, role, phone) VALUES (?, ?, ?, ?, 'tutor', ?)`,
-          [name.trim(), uname, uemail, hashed, phone.trim()]
-        );
-        tutorUserId = uRes.insertId;
+      if (dup.length > 0) {
+        uname = `${baseUname}${Math.floor(100 + Math.random() * 900)}`;
       }
+
+      const hashed = await bcrypt.hash(rawPass, 10);
+      const [uRes] = await db.query(
+        `INSERT INTO users (name, username, email, password, role, phone) VALUES (?, ?, ?, ?, 'tutor', ?)`,
+        [name.trim(), uname, uemail, hashed, phone.trim()]
+      );
+      tutorUserId = uRes.insertId;
     }
 
     const [result] = await db.query(
@@ -1564,17 +1604,19 @@ app.get('/api/schedules', authenticateToken, async (req, res) => {
 app.post('/api/schedules', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { student_id, tutor_id, program_name, unit_name, class_type, day_of_week, start_time, end_time, duration_minutes, subject, location_type, is_home_visit, home_address, notes } = req.body;
-    if (!student_id || !tutor_id || !day_of_week || !start_time || !end_time) {
-      return res.status(400).json({ success: false, message: 'Siswa, tutor, hari, jam mulai dan selesai wajib diisi.' });
+    if (!student_id || !tutor_id || !day_of_week) {
+      return res.status(400).json({ success: false, message: 'Siswa, tutor, dan hari belajar wajib diisi.' });
     }
 
     const isHome = is_home_visit || class_type === 'Privat Home Visit' ? 1 : 0;
     const dur = duration_minutes || 90;
+    const sTime = start_time || '00:00:00';
+    const eTime = end_time || '00:00:00';
 
     const [result] = await db.query(
       `INSERT INTO schedules (student_id, tutor_id, program_name, unit_name, class_type, day_of_week, start_time, end_time, duration_minutes, subject, location_type, is_home_visit, home_address, status, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
-      [student_id, tutor_id, program_name || 'Cermat Matematika', unit_name || 'Unit Riscon Rancaekek', class_type || 'Semi Privat', day_of_week, start_time, end_time, dur, subject || program_name, location_type || 'offline', isHome, home_address || '', notes || '']
+      [student_id, tutor_id, program_name || 'Cermat Matematika', unit_name || 'Unit Riscon Rancaekek', class_type || 'Semi Privat', day_of_week, sTime, eTime, dur, subject || program_name, location_type || 'offline', isHome, home_address || '', notes || '']
     );
 
     res.status(201).json({ success: true, message: 'Jadwal les baru berhasil ditambahkan.', id: result.insertId });
@@ -1587,12 +1629,14 @@ app.put('/api/schedules/:id', authenticateToken, requireRole('admin'), async (re
   try {
     const { student_id, tutor_id, program_name, unit_name, class_type, day_of_week, start_time, end_time, duration_minutes, subject, location_type, is_home_visit, home_address, status, notes } = req.body;
     const isHome = is_home_visit || class_type === 'Privat Home Visit' ? 1 : 0;
+    const sTime = start_time || '00:00:00';
+    const eTime = end_time || '00:00:00';
 
     await db.query(
       `UPDATE schedules 
        SET student_id=?, tutor_id=?, program_name=?, unit_name=?, class_type=?, day_of_week=?, start_time=?, end_time=?, duration_minutes=?, subject=?, location_type=?, is_home_visit=?, home_address=?, status=?, notes=?
        WHERE id=?`,
-      [student_id, tutor_id, program_name, unit_name, class_type, day_of_week, start_time, end_time, duration_minutes || 90, subject, location_type, isHome, home_address, status || 'active', notes, req.params.id]
+      [student_id, tutor_id, program_name, unit_name, class_type, day_of_week, sTime, eTime, duration_minutes || 90, subject, location_type, isHome, home_address, status || 'active', notes, req.params.id]
     );
 
     res.json({ success: true, message: 'Jadwal les berhasil diperbarui.' });
@@ -1740,7 +1784,15 @@ app.post('/api/attendances', authenticateToken, requireRole('admin', 'tutor'), a
       return res.status(400).json({ success: false, message: 'Siswa, tanggal, dan status presensi wajib diisi.' });
     }
 
-    const actualTutorId = tutor_id || req.user.tutor_id || 1;
+    let actualTutorId = tutor_id;
+    if (!actualTutorId && req.user.role === 'tutor') {
+      actualTutorId = req.user.tutor_id;
+      if (!actualTutorId) {
+        const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? OR name = ? LIMIT 1', [req.user.id, req.user.email, req.user.name]);
+        if (tutors.length > 0) actualTutorId = tutors[0].id;
+      }
+    }
+    actualTutorId = actualTutorId || 1;
     const isHome = is_home_visit || class_type === 'Privat Home Visit' ? 1 : 0;
     const dur = duration_minutes || 90;
 
@@ -1975,20 +2027,26 @@ app.get('/api/reschedule', authenticateToken, async (req, res) => {
 
 app.post('/api/reschedule', authenticateToken, async (req, res) => {
   try {
-    const { student_id, program_name, unit_name, class_type, schedule_id, original_date, reason, reason_details, requested_new_date, requested_new_time } = req.body;
-    if (!student_id || !original_date || !reason_details) {
-      return res.status(400).json({ success: false, message: 'Siswa, tanggal awal, dan alasan wajib diisi.' });
+    const { student_id, program_name, unit_name, class_type, schedule_id, original_date, reason, reason_details, requested_new_date, requested_new_time, session_decision, admin_notes } = req.body;
+    if (!student_id || !original_date) {
+      return res.status(400).json({ success: false, message: 'Siswa dan tanggal wajib diisi.' });
     }
 
+    const isAdmin = req.user.role === 'admin';
+    const initStatus = isAdmin ? (req.body.status || 'approved') : 'pending';
+    const initDecision = isAdmin ? (session_decision || 'valid') : null;
+    const initNotes = isAdmin ? (admin_notes || 'Dicatat langsung oleh Admin.') : null;
+    const approvedBy = isAdmin ? req.user.id : null;
+
     const [result] = await db.query(
-      `INSERT INTO reschedule_requests (student_id, program_name, unit_name, class_type, schedule_id, original_date, reason, reason_details, requested_new_date, requested_new_time, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [student_id, program_name || 'Cermat Matematika', unit_name || 'Unit Riscon Rancaekek', class_type || 'Semi Privat', schedule_id || null, original_date, reason || 'izin', reason_details, requested_new_date || null, requested_new_time || '']
+      `INSERT INTO reschedule_requests (student_id, program_name, unit_name, class_type, schedule_id, original_date, reason, reason_details, requested_new_date, requested_new_time, status, session_decision, admin_notes, approved_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [student_id, program_name || 'Cermat Matematika', unit_name || 'Unit Riscon Rancaekek', class_type || 'Semi Privat', schedule_id || null, original_date, reason || 'izin', reason_details || 'Izin tercatat', requested_new_date || null, requested_new_time || '', initStatus, initDecision, initNotes, approvedBy]
     );
 
     res.status(201).json({
       success: true,
-      message: 'Pengajuan izin/reschedule berhasil dikirim. Menunggu konfirmasi keputusan administratif Admin.',
+      message: isAdmin ? 'Pencatatan izin siswa berhasil disimpan.' : 'Pengajuan izin/reschedule berhasil dikirim.',
       id: result.insertId
     });
   } catch (error) {

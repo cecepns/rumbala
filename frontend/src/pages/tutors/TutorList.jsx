@@ -20,7 +20,8 @@ import {
   Layers,
   Award,
   DollarSign,
-  CheckCircle2
+  CheckCircle2,
+  UserCheck
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -57,6 +58,9 @@ export default function TutorList() {
     fee_per_session: 75000,
     status: "active",
     bio: "",
+    create_tutor_account: true,
+    tutor_username: "",
+    tutor_password: "password123",
     rates: []
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -134,6 +138,9 @@ export default function TutorList() {
       fee_per_session: 75000,
       status: "active",
       bio: "",
+      create_tutor_account: true,
+      tutor_username: "",
+      tutor_password: "password123",
       rates: []
     });
     setIsModalOpen(true);
@@ -161,6 +168,9 @@ export default function TutorList() {
       fee_per_session: tutor.fee_per_session || 75000,
       status: tutor.status || "active",
       bio: tutor.bio || "",
+      create_tutor_account: false,
+      tutor_username: tutor.user_username || "",
+      tutor_password: "",
       rates: tutor.rates || []
     });
     setIsModalOpen(true);
@@ -180,7 +190,8 @@ export default function TutorList() {
           : (formData.units_teaching || ""),
         class_types: Array.isArray(formData.class_types)
           ? formData.class_types.join(", ")
-          : (formData.class_types || "")
+          : (formData.class_types || ""),
+        create_tutor_account: true
       };
 
       if (editingTutor) {
@@ -193,7 +204,7 @@ export default function TutorList() {
       } else {
         const res = await request.post(API_ENDPOINTS.TUTORS.CREATE, payload);
         if (res.success) {
-          toast.success("Data tutor baru berhasil ditambahkan!");
+          toast.success("Data tutor & akun login portal berhasil ditambahkan!");
           setIsModalOpen(false);
           fetchTutors();
         }
@@ -390,7 +401,18 @@ export default function TutorList() {
                           {tutor.status === "active" ? "Aktif" : "Nonaktif"}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">Tutor ID: #{tutor.id}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        <span className="text-xs text-slate-500">ID: #{tutor.id}</span>
+                        {tutor.user_username ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Akun: {tutor.user_username}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            Akun login aktif
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -615,6 +637,53 @@ export default function TutorList() {
               </select>
             </div>
           </div>
+
+          {/* Akun Pengguna / Login Portal Tutor */}
+          {!editingTutor && (
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50/60 rounded-2xl border border-emerald-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                    Akun Login Portal Pengajar
+                  </h4>
+                  <p className="text-[11px] text-emerald-700">
+                    Akun login otomatis dibuatkan agar tutor langsung dapat login tanpa perlu diinput lagi oleh admin di menu akun.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Username Login
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.tutor_username}
+                    onChange={(e) => setFormData({ ...formData, tutor_username: e.target.value })}
+                    placeholder={formData.name ? `tutor.${formData.name.toLowerCase().replace(/[^a-z0-9]/g, '')}` : "tutor.nama"}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Biarkan kosong untuk username otomatis.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Password Default
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.tutor_password}
+                    onChange={(e) => setFormData({ ...formData, tutor_password: e.target.value })}
+                    placeholder="password123"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Default: password123</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Program & Keahlian Checkboxes */}
           <div>

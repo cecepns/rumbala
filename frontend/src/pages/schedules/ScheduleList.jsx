@@ -81,6 +81,16 @@ export default function ScheduleList() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Modal Student Filter & Search
+  const [modalUnitFilter, setModalUnitFilter] = useState("");
+  const [modalStudentSearch, setModalStudentSearch] = useState("");
+
+  const filteredStudentsForModal = students.filter((s) => {
+    const matchUnit = !modalUnitFilter || s.unit_name === modalUnitFilter || s.programs?.some((p) => p.unit_name === modalUnitFilter);
+    const matchSearch = !modalStudentSearch || s.name?.toLowerCase().includes(modalStudentSearch.toLowerCase()) || s.nickname?.toLowerCase().includes(modalStudentSearch.toLowerCase());
+    return matchUnit && matchSearch;
+  });
+
   const fetchOptions = async () => {
     try {
       const [sRes, tRes, uRes, pRes] = await Promise.all([
@@ -243,9 +253,9 @@ export default function ScheduleList() {
       return;
     }
 
-    const message = `*PENGINGAT JADWAL LES RUMBALA* 📚\n\nHalo ${
+    const message = `*JADWAL LES RUMBALA* 📚\n\nHalo ${
       targetType === "parent" ? `Ayah/Bunda dari ananda *${sc.student_name}*` : `Tutor *${sc.tutor_name}*`
-    },\n\nMengingatkan jadwal bimbingan belajar sesi berikutnya:\n📖 *Program:* ${sc.program_name}\n🏷️ *Jenis Kelas:* ${sc.class_type || "Semi Privat"}\n🗓️ *Hari & Waktu:* ${sc.day_of_week}, ${formatTime(sc.start_time)} - ${formatTime(sc.end_time)} WIB\n📍 *Lokasi / Unit:* ${sc.unit_name}\n👩‍🏫 *Tutor:* ${sc.tutor_name || "Tutor Rumbala"}\n\nMohon hadir tepat waktu ya. Terima kasih! ✨\n_Rumah Belajar Alfatih (RUMBALA)_`;
+    },\n\nBerikut informasi jadwal bimbingan belajar rutin:\n📖 *Program:* ${sc.program_name}\n🏷️ *Jenis Kelas:* ${sc.class_type || "Semi Privat"}\n🗓️ *Hari Belajar:* Hari ${sc.day_of_week} (Rutin Setiap Minggu)\n📍 *Lokasi / Unit:* ${sc.unit_name}\n👩‍🏫 *Tutor:* ${sc.tutor_name || "Tutor Rumbala"}\n\nTerima kasih! ✨\n_Rumah Belajar Alfatih (RUMBALA)_`;
 
     const url = createWhatsAppUrl(phone, message);
     window.open(url, "_blank");
@@ -352,7 +362,7 @@ export default function ScheduleList() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[11px]">
                 <tr>
-                  <th className="py-3.5 px-4">Hari & Jam (Durasi)</th>
+                  <th className="py-3.5 px-4">Hari Belajar</th>
                   <th className="py-3.5 px-4">Siswa & Kelas</th>
                   <th className="py-3.5 px-4">Program & Kuota Paket</th>
                   <th className="py-3.5 px-4">Unit / Lokasi Pembelajaran</th>
@@ -365,11 +375,12 @@ export default function ScheduleList() {
                 {schedules.map((sc) => (
                   <tr key={sc.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="space-y-0.5">
-                        <span className="font-extrabold text-slate-900 text-sm">{sc.day_of_week}</span>
-                        <div className="flex items-center gap-1 text-[11px] font-semibold text-primary-700">
-                          <Clock className="w-3.5 h-3.5 text-primary-600" />
-                          {formatTime(sc.start_time)} - {formatTime(sc.end_time)} ({sc.duration_minutes || 90}m)
+                      <div className="space-y-1">
+                        <span className="font-extrabold text-slate-900 text-sm">Hari {sc.day_of_week}</span>
+                        <div>
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            Rutin Tiap Minggu
+                          </span>
                         </div>
                       </div>
                     </td>
@@ -484,37 +495,74 @@ export default function ScheduleList() {
         subtitle="Atur siswa, tutor pengajar, program, unit lokasi, dan jenis kelas"
       >
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Unit Filter & Student Search Box */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  1. Filter Unit Belajar
+                </label>
+                <select
+                  value={modalUnitFilter}
+                  onChange={(e) => setModalUnitFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold"
+                >
+                  <option value="">-- Semua Unit Siswa --</option>
+                  {units.map((u) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  2. Cari Nama Siswa
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ketik nama siswa..."
+                  value={modalStudentSearch}
+                  onChange={(e) => setModalStudentSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-primary-500/20"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Pilih Siswa *
+                Pilih Siswa * ({filteredStudentsForModal.length} siswa ditemukan)
               </label>
               <select
                 value={formData.student_id}
                 onChange={(e) => {
                   const sId = e.target.value;
                   const st = students.find((s) => s.id === parseInt(sId));
+                  const prog = st?.programs?.[0] || st;
                   setFormData({
                     ...formData,
                     student_id: sId,
-                    program_name: st?.programs?.[0]?.program_name || formData.program_name,
-                    unit_name: st?.programs?.[0]?.unit_name || formData.unit_name,
-                    class_type: st?.programs?.[0]?.class_type || formData.class_type,
+                    program_name: prog?.program_name || formData.program_name,
+                    unit_name: prog?.unit_name || formData.unit_name,
+                    class_type: prog?.class_type || formData.class_type,
                     home_address: st?.address || formData.home_address
                   });
                 }}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl text-slate-800 font-bold"
                 required
               >
                 <option value="">-- Pilih Siswa --</option>
-                {students.map((s) => (
+                {filteredStudentsForModal.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.class_grade})
+                    {s.name} ({s.class_grade}) &bull; {s.class_type || s.programs?.[0]?.class_type || "Semi Privat"} &bull; {s.unit_name || s.programs?.[0]?.unit_name || "Unit"}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                 Tutor Pengajar *
@@ -533,9 +581,7 @@ export default function ScheduleList() {
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                 Program Les *
@@ -552,7 +598,9 @@ export default function ScheduleList() {
                 ))}
               </select>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                 Pilihan Jenis Kelas *
@@ -565,6 +613,23 @@ export default function ScheduleList() {
                 {CLASS_TYPES.map((c) => (
                   <option key={c} value={c}>
                     {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Hari Bimbingan Rutin *
+              </label>
+              <select
+                value={formData.day_of_week}
+                onChange={(e) => setFormData({ ...formData, day_of_week: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
+              >
+                {DAYS_OF_WEEK.map((d) => (
+                  <option key={d} value={d}>
+                    Hari {d}
                   </option>
                 ))}
               </select>
@@ -605,51 +670,6 @@ export default function ScheduleList() {
               />
             </div>
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Hari *
-              </label>
-              <select
-                value={formData.day_of_week}
-                onChange={(e) => setFormData({ ...formData, day_of_week: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
-              >
-                {DAYS_OF_WEEK.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Jam Mulai *
-              </label>
-              <input
-                type="time"
-                required
-                value={formData.start_time}
-                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Jam Selesai *
-              </label>
-              <input
-                type="time"
-                required
-                value={formData.end_time}
-                onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold"
-              />
-            </div>
-          </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button

@@ -222,23 +222,25 @@ export default function RescheduleList() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
-            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Keputusan Administratif"}
+            Administrasi Izin Siswa
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            Izin & Reschedule Sesi Les
+            Pencatatan Izin & Reschedule Sesi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Alur: Orang Tua mengajukan &rarr; Admin memproses keputusan administratif &rarr; Tutor menerima informasi jadwal pengganti.
+            Pencatatan izin ketidakhadiran siswa dan penjadwalan ulang dicatat terpusat oleh Admin.
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Ajukan Izin / Reschedule
-        </button>
+        {role === "admin" && (
+          <button
+            onClick={handleOpenCreate}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Catat Izin Siswa
+          </button>
+        )}
       </div>
 
       {/* Parent Filter Bar */}
@@ -261,7 +263,7 @@ export default function RescheduleList() {
         </div>
 
         <div className="text-xs text-slate-400 font-semibold">
-          Total: <strong className="text-slate-800">{requests.length}</strong> Pengajuan
+          Total: <strong className="text-slate-800">{requests.length}</strong> Catatan Izin
         </div>
       </div>
 
@@ -271,10 +273,10 @@ export default function RescheduleList() {
       ) : requests.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
-          title="Tidak Ada Pengajuan Izin"
-          description="Belum ada riwayat permohonan izin atau reschedule jadwal les."
-          actionText="Ajukan Izin / Reschedule"
-          onAction={handleOpenCreate}
+          title="Tidak Ada Catatan Izin"
+          description="Belum ada riwayat izin atau reschedule siswa yang dicatat."
+          actionText={role === "admin" ? "Catat Izin Siswa" : undefined}
+          onAction={role === "admin" ? handleOpenCreate : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

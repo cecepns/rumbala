@@ -44,8 +44,13 @@ export default function AttendanceList() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
-  const [periodFilter, setPeriodFilter] = useState("Agustus 2026");
+  const [periodFilter, setPeriodFilter] = useState("Semua Periode");
   const [statusFilter, setStatusFilter] = useState("");
+  const [unitFilter, setUnitFilter] = useState("");
+
+  // Modal Student Filter & Search
+  const [modalUnitFilter, setModalUnitFilter] = useState("");
+  const [modalStudentSearch, setModalStudentSearch] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -73,11 +78,22 @@ export default function AttendanceList() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  const filteredStudentsForModal = students.filter((s) => {
+    const matchUnit = !modalUnitFilter || s.unit_name === modalUnitFilter || s.programs?.some((p) => p.unit_name === modalUnitFilter);
+    const matchSearch = !modalStudentSearch || s.name?.toLowerCase().includes(modalStudentSearch.toLowerCase()) || s.nickname?.toLowerCase().includes(modalStudentSearch.toLowerCase());
+    return matchUnit && matchSearch;
+  });
+
   const fetchOptions = async () => {
     try {
       if (role === "tutor") {
         const sRes = await request.get(API_ENDPOINTS.TUTOR_STUDENTS.LIST);
-        if (sRes.success) setStudents(sRes.data || []);
+        if (sRes.success && sRes.data && sRes.data.length > 0) {
+          setStudents(sRes.data);
+        } else {
+          const allRes = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
+          if (allRes.success) setStudents(allRes.data || []);
+        }
       } else {
         const sRes = await request.get(API_ENDPOINTS.STUDENTS.LIST, { limit: 100 });
         if (sRes.success) setStudents(sRes.data || []);
@@ -108,6 +124,10 @@ export default function AttendanceList() {
         status: statusFilter
       };
 
+      if (unitFilter && unitFilter !== "Semua Unit") {
+        params.unit_name = unitFilter;
+      }
+
       if (role === "parent") {
         if (selectedChildId) params.student_id = selectedChildId;
         if (selectedProgram && selectedProgram !== "Semua Program") params.program_name = selectedProgram;
@@ -124,7 +144,7 @@ export default function AttendanceList() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, dateFilter, periodFilter, statusFilter, role, selectedChildId, selectedProgram]);
+  }, [page, limit, search, dateFilter, periodFilter, statusFilter, unitFilter, role, selectedChildId, selectedProgram]);
 
   useEffect(() => {
     fetchOptions();
@@ -135,15 +155,19 @@ export default function AttendanceList() {
   }, [fetchAttendances]);
 
   const handleOpenCreate = () => {
+    setModalUnitFilter("");
+    setModalStudentSearch("");
     const firstStudent = students[0];
     const initialProg = firstStudent?.programs?.[0] || firstStudent;
+    const cType = initialProg?.class_type || firstStudent?.class_type || (initialProg?.is_home_visit ? "Privat Home Visit" : "Semi Privat");
+
     setFormData({
       student_id: firstStudent?.id || "",
       tutor_id: user?.tutor_id || firstStudent?.tutor_id || tutors[0]?.id || "",
       program_name: initialProg?.program_name || programs[0]?.name || "Pracalis",
       unit_name: initialProg?.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
-      class_type: initialProg?.class_type || "Semi Privat",
-      is_home_visit: initialProg?.class_type === "Privat Home Visit" ? 1 : 0,
+      class_type: cType,
+      is_home_visit: cType === "Privat Home Visit" ? 1 : 0,
       date: new Date().toISOString().split("T")[0],
       start_time: "15:30",
       end_time: "17:00",
@@ -164,17 +188,43 @@ export default function AttendanceList() {
 
   const handleStudentChangeInForm = (studentId) => {
     const st = students.find((s) => s.id === parseInt(studentId));
-    const prog = st?.programs?.[0] || st;
+    if (!st) return;
+    const prog = (st.programs && st.programs.length > 0) ? st.programs[0] : st;
+    const cType = prog.class_type || st.class_type || (st.is_home_visit ? "Privat Home Visit" : "Semi Privat");
+
     setFormData((prev) => ({
       ...prev,
       student_id: studentId,
-      program_name: prog?.program_name || prev.program_name,
-      unit_name: prog?.unit_name || prev.unit_name,
-      class_type: prog?.class_type || prev.class_type,
-      is_home_visit: prog?.class_type === "Privat Home Visit" ? 1 : 0,
-      session_number: (prog?.completed_sessions_month || 0) + 1,
-      package_total: prog?.package_sessions || 8,
+      tutor_id: user?.tutor_id || prog.tutor_id || st.tutor_id || prev.tutor_id || tutors[0]?.id || "",
+      program_name: prog.program_name || st.program_name || prev.program_name,
+      unit_name: prog.unit_name || st.unit_name || prev.unit_name,
+      class_type: cType,
+      is_home_visit: cType === "Privat Home Visit" ? 1 : 0,
+      session_number: (prog.completed_sessions_month || 0) + 1,
+      package_total: prog.package_sessions || 8,
     }));
+  };
+
+  const handleProgramChangeInForm = (progName) => {
+    const st = students.find((s) => s.id === parseInt(formData.student_id));
+    const matchedProg = st?.programs?.find((p) => p.program_name === progName);
+    if (matchedProg) {
+      const cType = matchedProg.class_type || formData.class_type;
+      setFormData((prev) => ({
+        ...prev,
+        program_name: progName,
+        class_type: cType,
+        is_home_visit: cType === "Privat Home Visit" ? 1 : 0,
+        unit_name: matchedProg.unit_name || prev.unit_name,
+        session_number: (matchedProg.completed_sessions_month || 0) + 1,
+        package_total: matchedProg.package_sessions || 8,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        program_name: progName
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -286,6 +336,22 @@ export default function AttendanceList() {
           />
 
           <select
+            value={unitFilter}
+            onChange={(e) => {
+              setUnitFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold cursor-pointer"
+          >
+            <option value="">Semua Unit Cabang</option>
+            {units.map((u) => (
+              <option key={u.id} value={u.name}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+
+          <select
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
@@ -349,12 +415,14 @@ export default function AttendanceList() {
                     <td className="py-3.5 px-4">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                          att.is_home_visit
+                          att.is_home_visit || att.class_type === "Privat Home Visit"
                             ? "bg-purple-100 text-purple-800 border border-purple-200"
+                            : att.class_type?.includes("Online")
+                            ? "bg-sky-100 text-sky-800"
                             : "bg-slate-100 text-slate-700"
                         }`}
                       >
-                        {att.class_type || "Semi Privat"}
+                        {att.class_type || (att.is_home_visit ? "Privat Home Visit" : "Semi Privat")}
                       </span>
                     </td>
 
@@ -404,33 +472,73 @@ export default function AttendanceList() {
         maxWidth="max-w-xl"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Pilih Siswa & Program *
-              </label>
-              <select
-                value={formData.student_id}
-                onChange={(e) => handleStudentChangeInForm(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary-500/20"
-                required
-              >
-                <option value="">-- Pilih Siswa --</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {s.class_type || "Semi Privat"} ({s.program_name || s.class_grade})
-                  </option>
-                ))}
-              </select>
+          {/* Unit Filter & Student Search in Modal */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  1. Filter Unit Cabang
+                </label>
+                <select
+                  value={modalUnitFilter}
+                  onChange={(e) => setModalUnitFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-semibold"
+                >
+                  <option value="">-- Semua Unit Siswa --</option>
+                  {units.map((u) => (
+                    <option key={u.id} value={u.name}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  2. Cari Nama Siswa
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ketik nama siswa..."
+                  value={modalStudentSearch}
+                  onChange={(e) => setModalStudentSearch(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-primary-500/20"
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Program Les
+                Pilih Siswa & Program * ({filteredStudentsForModal.length} siswa ditemukan)
+              </label>
+              <select
+                value={formData.student_id}
+                onChange={(e) => handleStudentChangeInForm(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold focus:ring-2 focus:ring-primary-500/20"
+                required
+              >
+                <option value="">-- Pilih Siswa --</option>
+                {filteredStudentsForModal.map((s) => {
+                  const cType = s.programs?.[0]?.class_type || s.class_type || (s.is_home_visit ? "Privat Home Visit" : "Semi Privat");
+                  const pName = s.programs?.[0]?.program_name || s.program_name || s.class_grade;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — {cType} ({pName})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Program Les *
               </label>
               <select
                 value={formData.program_name}
-                onChange={(e) => setFormData({ ...formData, program_name: e.target.value })}
+                onChange={(e) => handleProgramChangeInForm(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
               >
                 {programs.map((p) => (
