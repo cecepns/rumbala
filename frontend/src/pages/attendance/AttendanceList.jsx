@@ -34,9 +34,11 @@ export default function AttendanceList() {
   const [attendances, setAttendances] = useState([]);
   const [students, setStudents] = useState([]);
   const [tutors, setTutors] = useState([]);
+  const [currentTutor, setCurrentTutor] = useState(null);
   const [units, setUnits] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDetail, setSelectedDetail] = useState(null);
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -104,9 +106,17 @@ export default function AttendanceList() {
         request.get(API_ENDPOINTS.UNITS.LIST),
         request.get(API_ENDPOINTS.PROGRAMS.LIST),
       ]);
-      if (tRes.success) setTutors(tRes.data || []);
+      const tutorList = tRes.data || [];
+      if (tRes.success) setTutors(tutorList);
       if (uRes.success) setUnits(uRes.data || []);
       if (pRes.success) setPrograms(pRes.data || []);
+
+      if (role === "tutor") {
+        const foundTutor = tutorList.find(
+          (t) => t.id === user?.tutor_id || t.user_id === user?.id || (t.email && t.email === user?.email) || t.name === user?.name
+        );
+        if (foundTutor) setCurrentTutor(foundTutor);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -161,9 +171,17 @@ export default function AttendanceList() {
     const initialProg = firstStudent?.programs?.[0] || firstStudent;
     const cType = initialProg?.class_type || firstStudent?.class_type || (initialProg?.is_home_visit ? "Privat Home Visit" : "Semi Privat");
 
+    let initialTutorId = "";
+    if (role === "tutor") {
+      const myT = currentTutor || tutors.find((t) => t.id === user?.tutor_id || t.user_id === user?.id || (t.email && t.email === user?.email) || t.name === user?.name);
+      initialTutorId = myT?.id || user?.tutor_id || tutors[0]?.id || "";
+    } else {
+      initialTutorId = initialProg?.tutor_id || firstStudent?.tutor_id || tutors[0]?.id || "";
+    }
+
     setFormData({
       student_id: firstStudent?.id || "",
-      tutor_id: user?.tutor_id || firstStudent?.tutor_id || tutors[0]?.id || "",
+      tutor_id: initialTutorId,
       program_name: initialProg?.program_name || programs[0]?.name || "Pracalis",
       unit_name: initialProg?.unit_name || units[0]?.name || "Unit Riscon Rancaekek",
       class_type: cType,
@@ -192,17 +210,23 @@ export default function AttendanceList() {
     const prog = (st.programs && st.programs.length > 0) ? st.programs[0] : st;
     const cType = prog.class_type || st.class_type || (st.is_home_visit ? "Privat Home Visit" : "Semi Privat");
 
-    setFormData((prev) => ({
-      ...prev,
-      student_id: studentId,
-      tutor_id: user?.tutor_id || prog.tutor_id || st.tutor_id || prev.tutor_id || tutors[0]?.id || "",
-      program_name: prog.program_name || st.program_name || prev.program_name,
-      unit_name: prog.unit_name || st.unit_name || prev.unit_name,
-      class_type: cType,
-      is_home_visit: cType === "Privat Home Visit" ? 1 : 0,
-      session_number: (prog.completed_sessions_month || 0) + 1,
-      package_total: prog.package_sessions || 8,
-    }));
+    setFormData((prev) => {
+      let resolvedTutorId = prev.tutor_id;
+      if (role !== "tutor") {
+        resolvedTutorId = prog.tutor_id || st.tutor_id || prev.tutor_id || tutors[0]?.id || "";
+      }
+      return {
+        ...prev,
+        student_id: studentId,
+        tutor_id: resolvedTutorId,
+        program_name: prog.program_name || st.program_name || prev.program_name,
+        unit_name: prog.unit_name || st.unit_name || prev.unit_name,
+        class_type: cType,
+        is_home_visit: cType === "Privat Home Visit" ? 1 : 0,
+        session_number: (prog.completed_sessions_month || 0) + 1,
+        package_total: prog.package_sessions || 8,
+      };
+    });
   };
 
   const handleProgramChangeInForm = (progName) => {
@@ -232,8 +256,13 @@ export default function AttendanceList() {
     try {
       setIsSaving(true);
       const isHome = formData.class_type === "Privat Home Visit" ? 1 : 0;
+      let finalTutorId = formData.tutor_id;
+      if (role === "tutor" && (!finalTutorId || finalTutorId === "")) {
+        finalTutorId = currentTutor?.id || user?.tutor_id || tutors[0]?.id || "";
+      }
       const res = await request.post(API_ENDPOINTS.ATTENDANCES.CREATE, {
         ...formData,
+        tutor_id: finalTutorId,
         is_home_visit: isHome
       });
       if (res.success) {
@@ -269,13 +298,15 @@ export default function AttendanceList() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-primary-600">
-            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor" : "Manajemen Presensi"}
+            {role === "parent" ? "Portal Orang Tua" : role === "tutor" ? "Portal Tutor Pengajar" : "Manajemen Presensi"}
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            {role === "parent" ? "Riwayat Kehadiran Ananda" : "Absensi & Presensi Sesi Bimbingan"}
+            {role === "parent" ? "Riwayat Kehadiran Ananda" : role === "tutor" ? "Presensi & Jurnal Mengajar Saya" : "Absensi & Presensi Sesi Bimbingan"}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Sesi yang benar-benar terlaksana (Hadir) menjadi dasar perhitungan progress siswa, rekap kehadiran, dan honor tutor.
+            {role === "tutor"
+              ? "Catat kehadiran siswa asuhan Anda dan ringkasan catatan materi setelah setiap sesi bimbingan selesai."
+              : "Sesi yang benar-benar terlaksana (Hadir) menjadi dasar perhitungan progress siswa, rekap kehadiran, dan honor tutor."}
           </p>
         </div>
 
@@ -386,6 +417,7 @@ export default function AttendanceList() {
                   <th className="py-3.5 px-4">Jenis Kelas</th>
                   <th className="py-3.5 px-4 text-center">Pertemuan Ke</th>
                   <th className="py-3.5 px-4 text-center">Status Sesi</th>
+                  <th className="py-3.5 px-4 text-center">Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -401,10 +433,19 @@ export default function AttendanceList() {
                     <td className="py-3.5 px-4">
                       <p className="font-extrabold text-slate-800">{att.student_name}</p>
                       <p className="text-[10px] text-slate-400">{att.class_grade}</p>
+                      {att.topic && (
+                        <p className="text-[11px] text-primary-700 font-medium truncate max-w-[200px] mt-0.5 flex items-center gap-1">
+                          <BookOpen className="w-3 h-3 shrink-0 text-primary-600" />
+                          <span>{att.topic}</span>
+                        </p>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-800">{att.tutor_name || "Tutor"}</p>
+                      <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{att.tutor_name || "Tutor"}</span>
+                      </p>
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -434,6 +475,16 @@ export default function AttendanceList() {
 
                     <td className="py-3.5 px-4 text-center">
                       {getStatusBadge(att.status)}
+                    </td>
+
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetail(att)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-primary-700 bg-primary-50 hover:bg-primary-100 transition-colors cursor-pointer"
+                      >
+                        Detail
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -539,7 +590,7 @@ export default function AttendanceList() {
               <select
                 value={formData.program_name}
                 onChange={(e) => handleProgramChangeInForm(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold bg-white"
               >
                 {programs.map((p) => (
                   <option key={p.id} value={p.name}>
@@ -547,6 +598,32 @@ export default function AttendanceList() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Tutor Pengajar *
+              </label>
+              {role === "tutor" ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800">
+                  <User className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">{currentTutor?.name || user?.name || "Tutor Pengajar"} (Anda)</span>
+                </div>
+              ) : (
+                <select
+                  value={formData.tutor_id}
+                  onChange={(e) => setFormData({ ...formData, tutor_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold bg-white"
+                  required
+                >
+                  <option value="">-- Pilih Tutor Pengajar --</option>
+                  {tutors.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -664,62 +741,69 @@ export default function AttendanceList() {
 
           {/* Integrated Brief Journal */}
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-            <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-primary-600" />
-              Catatan Jurnal Sesi (Ringkas):
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-primary-600" />
+                Catatan Jurnal Sesi:
+              </span>
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-200/70 px-2.5 py-0.5 rounded-full">
+                Opsional / Boleh Dikosongkan
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Catatan materi dan capaian belajar siswa tidak wajib diisi saat ini (bisa dikosongkan atau dilengkapi nanti).
+            </p>
 
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                Materi / Topik Pembelajaran *
+                Materi / Topik Pembelajaran <span className="text-slate-400 font-normal">(Opsional)</span>
               </label>
               <input
                 type="text"
                 value={formData.topic}
                 onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                placeholder="Contoh: Operasi Pecahan / Phonics / Tahsin Surah Al-Mulk"
-                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                required={formData.status === "hadir"}
+                placeholder="Contoh: Operasi Pecahan / Phonics / Tahsin Surah Al-Mulk (Boleh dikosongkan)"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                Capaian Singkat Sesi Ini
+                Capaian Singkat Sesi Ini <span className="text-slate-400 font-normal">(Opsional)</span>
               </label>
               <textarea
                 rows={2}
                 value={formData.targets_achieved}
                 onChange={(e) => setFormData({ ...formData, targets_achieved: e.target.value })}
                 placeholder="Contoh: Mampu menyelesaikan latihan dengan baik dan mandiri..."
-                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Tugas Rumah / PR (Jika Ada)
+                  Tugas Rumah / PR <span className="text-slate-400 font-normal">(Jika Ada)</span>
                 </label>
                 <input
                   type="text"
                   value={formData.homework}
                   onChange={(e) => setFormData({ ...formData, homework: e.target.value })}
                   placeholder="Latihan hal. 14 no 1-5 di buku fisik"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Catatan Khusus Sesi
+                  Catatan Khusus Sesi <span className="text-slate-400 font-normal">(Opsional)</span>
                 </label>
                 <input
                   type="text"
                   value={formData.progress_notes}
                   onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
                   placeholder="Ananda sangat antusias belajar"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
                 />
               </div>
             </div>
@@ -742,6 +826,100 @@ export default function AttendanceList() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={!!selectedDetail}
+        onClose={() => setSelectedDetail(null)}
+        title="Detail Presensi & Jurnal Sesi"
+        subtitle="Informasi lengkap sesi bimbingan belajar"
+        maxWidth="max-w-lg"
+      >
+        {selectedDetail && (
+          <div className="space-y-4 text-xs">
+            {/* Overview Card */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-sm text-slate-900">
+                  {selectedDetail.student_name}
+                </span>
+                {getStatusBadge(selectedDetail.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-slate-600 pt-1">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Program & Kelas:</span>
+                  <p className="font-semibold text-slate-800">{selectedDetail.program_name} ({selectedDetail.class_grade})</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Tutor Pengajar:</span>
+                  <p className="font-semibold text-slate-800">{selectedDetail.tutor_name || "Tutor"}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Waktu Pertemuan:</span>
+                  <p className="font-semibold text-slate-800">{formatDate(selectedDetail.date)}, {formatTime(selectedDetail.start_time)} - {formatTime(selectedDetail.end_time)}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Jenis Kelas / Unit:</span>
+                  <p className="font-semibold text-slate-800">{selectedDetail.class_type} &bull; {selectedDetail.unit_name}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Pertemuan Ke:</span>
+                  <p className="font-bold text-indigo-700">Sesi {selectedDetail.session_number || 1} dari {selectedDetail.package_total || 8}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Teaching Journal Card */}
+            <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+              <span className="text-xs font-extrabold uppercase text-slate-800 flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-primary-600" />
+                Catatan Jurnal Sesi:
+              </span>
+
+              {selectedDetail.topic ? (
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Materi / Topik:</span>
+                    <p className="font-bold text-slate-800 text-sm">{selectedDetail.topic}</p>
+                  </div>
+                  {selectedDetail.targets_achieved && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Capaian Pembelajaran:</span>
+                      <p className="text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">{selectedDetail.targets_achieved}</p>
+                    </div>
+                  )}
+                  {selectedDetail.homework && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Tugas Rumah / PR:</span>
+                      <p className="text-amber-900 bg-amber-50/70 p-2 rounded-xl border border-amber-100">{selectedDetail.homework}</p>
+                    </div>
+                  )}
+                  {selectedDetail.progress_notes && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Catatan Khusus:</span>
+                      <p className="text-slate-600 italic">"{selectedDetail.progress_notes}"</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-400 italic py-2">
+                  Tidak ada catatan materi / jurnal khusus pada sesi ini.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDetail(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

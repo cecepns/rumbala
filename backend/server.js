@@ -108,6 +108,42 @@ const requireRole = (...allowedRoles) => {
   };
 };
 
+// Helper to safely get valid tutor id for a user or fallback to first valid tutor in database
+const getEffectiveTutorId = async (user, preferredTutorId = null) => {
+  try {
+    // 1. If a preferred tutor id was provided, check if it exists in tutors table
+    if (preferredTutorId) {
+      const [tCheck] = await db.query('SELECT id FROM tutors WHERE id = ? LIMIT 1', [preferredTutorId]);
+      if (tCheck.length > 0) return tCheck[0].id;
+    }
+    // 2. If user object has tutor_id
+    if (user?.tutor_id) {
+      const [tCheck] = await db.query('SELECT id FROM tutors WHERE id = ? LIMIT 1', [user.tutor_id]);
+      if (tCheck.length > 0) return tCheck[0].id;
+    }
+    // 3. Search tutors by user.id, email, phone, or name
+    if (user?.id) {
+      const [tRows] = await db.query(
+        'SELECT id, user_id FROM tutors WHERE user_id = ? OR (email = ? AND email != "") OR (phone = ? AND phone != "") OR name = ? LIMIT 1',
+        [user.id, user.email || '', user.phone || '', user.name || '']
+      );
+      if (tRows.length > 0) {
+        if (!tRows[0].user_id) {
+          await db.query('UPDATE tutors SET user_id = ? WHERE id = ?', [user.id, tRows[0].id]);
+        }
+        return tRows[0].id;
+      }
+    }
+    // 4. Fallback to the first existing tutor in database
+    const [firstTutor] = await db.query('SELECT id FROM tutors ORDER BY id ASC LIMIT 1');
+    if (firstTutor.length > 0) return firstTutor[0].id;
+    return null;
+  } catch (err) {
+    console.error('Error resolving effective tutor id:', err);
+    return null;
+  }
+};
+
 // ==============================================================================
 // 1. AUTH ROUTES
 // ==============================================================================
@@ -139,8 +175,16 @@ app.post('/api/auth/login', async (req, res) => {
 
     let profileData = {};
     if (user.role === 'tutor') {
-      const [tutors] = await db.query('SELECT * FROM tutors WHERE user_id = ? OR email = ?', [user.id, user.email]);
-      if (tutors.length > 0) profileData.tutor_id = tutors[0].id;
+      const [tutors] = await db.query(
+        'SELECT * FROM tutors WHERE user_id = ? OR (email = ? AND email != "") OR (phone = ? AND phone != "") OR name = ? LIMIT 1',
+        [user.id, user.email || '', user.phone || '', user.name || '']
+      );
+      if (tutors.length > 0) {
+        profileData.tutor_id = tutors[0].id;
+        if (!tutors[0].user_id) {
+          await db.query('UPDATE tutors SET user_id = ? WHERE id = ?', [user.id, tutors[0].id]);
+        }
+      }
     } else if (user.role === 'parent') {
       const [students] = await db.query('SELECT * FROM students WHERE user_id = ? OR parent_phone = ?', [user.id, user.phone]);
       if (students.length > 0) {
@@ -180,8 +224,14 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
       const [children] = await db.query('SELECT * FROM students WHERE user_id = ? OR parent_phone = ?', [req.user.id, req.user.phone]);
       profileData.children = children;
     } else if (req.user.role === 'tutor') {
-      const [tutors] = await db.query('SELECT * FROM tutors WHERE user_id = ? OR email = ?', [req.user.id, req.user.email]);
-      if (tutors.length > 0) profileData.tutor = tutors[0];
+      const [tutors] = await db.query(
+        'SELECT * FROM tutors WHERE user_id = ? OR (email = ? AND email != "") OR (phone = ? AND phone != "") OR name = ? LIMIT 1',
+        [req.user.id, req.user.email || '', req.user.phone || '', req.user.name || '']
+      );
+      if (tutors.length > 0) {
+        profileData.tutor = tutors[0];
+        profileData.tutor_id = tutors[0].id;
+      }
     }
     res.json({
       success: true,
@@ -800,11 +850,7 @@ app.get('/api/parent/summary', authenticateToken, async (req, res) => {
 
 app.get('/api/tutor/students', authenticateToken, async (req, res) => {
   try {
-    let tutorId = req.user.tutor_id;
-    if (!tutorId) {
-      const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? OR name = ? LIMIT 1', [req.user.id, req.user.email, req.user.name]);
-      tutorId = tutors.length > 0 ? tutors[0].id : null;
-    }
+    let tutorId = await getEffectiveTutorId(req.user);
 
     if (!tutorId) {
       return res.json({ success: true, data: [] });
@@ -874,10 +920,9 @@ app.get('/api/tutor/students', authenticateToken, async (req, res) => {
 
 app.get('/api/tutor/dashboard-summary', authenticateToken, async (req, res) => {
   try {
-    let tutorId = req.user.tutor_id;
+    let tutorId = await getEffectiveTutorId(req.user);
     if (!tutorId) {
-      const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? LIMIT 1', [req.user.id, req.user.email]);
-      tutorId = tutors.length > 0 ? tutors[0].id : 1;
+      return res.json({ success: true, data: { programs_taught: [], units_taught: [], class_types: [], monthly_stats: {}, today_schedules: [] } });
     }
 
     const [progRows] = await db.query(
@@ -1565,9 +1610,13 @@ app.get('/api/schedules', authenticateToken, async (req, res) => {
         query += ' AND s.student_id = -1';
       }
     } else if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND s.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND s.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND s.tutor_id = -1`;
+      }
     }
 
     if (student_id) {
@@ -1686,9 +1735,13 @@ app.get('/api/attendances', authenticateToken, async (req, res) => {
         query += ' AND a.student_id = -1';
       }
     } else if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND a.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND a.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND a.tutor_id = -1`;
+      }
     }
 
     if (student_id) {
@@ -1784,15 +1837,13 @@ app.post('/api/attendances', authenticateToken, requireRole('admin', 'tutor'), a
       return res.status(400).json({ success: false, message: 'Siswa, tanggal, dan status presensi wajib diisi.' });
     }
 
-    let actualTutorId = tutor_id;
-    if (!actualTutorId && req.user.role === 'tutor') {
-      actualTutorId = req.user.tutor_id;
-      if (!actualTutorId) {
-        const [tutors] = await db.query('SELECT id FROM tutors WHERE user_id = ? OR email = ? OR name = ? LIMIT 1', [req.user.id, req.user.email, req.user.name]);
-        if (tutors.length > 0) actualTutorId = tutors[0].id;
-      }
+    const actualTutorId = await getEffectiveTutorId(req.user, tutor_id);
+    if (!actualTutorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data tutor pengajar tidak ditemukan. Harap pilih tutor atau pastikan data tutor sudah ada.'
+      });
     }
-    actualTutorId = actualTutorId || 1;
     const isHome = is_home_visit || class_type === 'Privat Home Visit' ? 1 : 0;
     const dur = duration_minutes || 90;
 
@@ -1844,8 +1895,9 @@ app.post('/api/attendances', authenticateToken, requireRole('admin', 'tutor'), a
       );
     }
 
-    // Insert integrated teaching journal if topic is provided
-    if (topic) {
+    // Insert integrated teaching journal if any journal content is provided (Topic & notes are optional)
+    const hasJournal = (topic && topic.trim()) || (targets_achieved && targets_achieved.trim()) || (progress_notes && progress_notes.trim()) || (homework && homework.trim());
+    if (hasJournal) {
       const evalJsonStr = eval_data ? JSON.stringify(eval_data) : null;
       await db.query(
         `INSERT INTO journals (attendance_id, student_id, tutor_id, program_name, unit_name, class_type, session_number, package_total, date, topic, targets_achieved, score, eval_data_json, fluency_rating, makhraj_rating, tajwid_rating, memorization_surah, murojaah_status, progress_notes, homework, next_target)
@@ -1854,14 +1906,14 @@ app.post('/api/attendances', authenticateToken, requireRole('admin', 'tutor'), a
           attendanceId,
           student_id,
           actualTutorId,
-          program_name || 'Cermat Matematika',
+          program_name || 'Pracalis',
           unit_name || 'Unit Riscon Rancaekek',
           class_type || 'Semi Privat',
           session_number || 1,
           package_total || 8,
           date,
-          topic,
-          targets_achieved || 'Materi sesi terselesaikan dengan baik.',
+          topic && topic.trim() ? topic.trim() : 'Sesi Bimbingan',
+          targets_achieved && targets_achieved.trim() ? targets_achieved.trim() : 'Materi sesi terselesaikan dengan baik.',
           score || null,
           evalJsonStr,
           fluency_rating || null,
@@ -1869,9 +1921,9 @@ app.post('/api/attendances', authenticateToken, requireRole('admin', 'tutor'), a
           tajwid_rating || null,
           memorization_surah || null,
           murojaah_status || null,
-          progress_notes || 'Ananda mengikuti bimbingan secara aktif dan kondusif.',
-          homework || '',
-          next_target || ''
+          progress_notes && progress_notes.trim() ? progress_notes.trim() : 'Ananda mengikuti bimbingan secara aktif dan kondusif.',
+          homework && homework.trim() ? homework.trim() : '',
+          next_target && next_target.trim() ? next_target.trim() : ''
         ]
       );
     }
@@ -1923,9 +1975,13 @@ app.get('/api/journals', authenticateToken, async (req, res) => {
         query += ' AND j.student_id = -1';
       }
     } else if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND j.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND j.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND j.tutor_id = -1`;
+      }
     }
 
     if (student_id) {
@@ -1971,6 +2027,56 @@ app.put('/api/journals/:id', authenticateToken, requireRole('admin', 'tutor'), a
   }
 });
 
+app.post('/api/journals', authenticateToken, requireRole('admin', 'tutor'), async (req, res) => {
+  try {
+    const { attendance_id, student_id, tutor_id, program_name, unit_name, class_type, session_number, package_total, date, topic, targets_achieved, score, eval_data, progress_notes, homework, next_target } = req.body;
+
+    // Check if journal already exists for this attendance
+    if (attendance_id) {
+      const [existing] = await db.query('SELECT id FROM journals WHERE attendance_id = ?', [attendance_id]);
+      if (existing.length > 0) {
+        const evalJsonStr = eval_data ? JSON.stringify(eval_data) : null;
+        await db.query(
+          `UPDATE journals SET topic=?, targets_achieved=?, score=?, eval_data_json=?, progress_notes=?, homework=?, next_target=? WHERE id=?`,
+          [topic || 'Sesi Bimbingan', targets_achieved || '', score || null, evalJsonStr, progress_notes || '', homework || '', next_target || '', existing[0].id]
+        );
+        return res.json({ success: true, message: 'Jurnal belajar berhasil diperbarui.', journal_id: existing[0].id });
+      }
+    }
+
+    const actualTutorId = await getEffectiveTutorId(req.user, tutor_id);
+    const evalJsonStr = eval_data ? JSON.stringify(eval_data) : null;
+
+    const [result] = await db.query(
+      `INSERT INTO journals (attendance_id, student_id, tutor_id, program_name, unit_name, class_type, session_number, package_total, date, topic, targets_achieved, score, eval_data_json, progress_notes, homework, next_target)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        attendance_id || null,
+        student_id,
+        actualTutorId,
+        program_name || 'Pracalis',
+        unit_name || 'Unit Riscon Rancaekek',
+        class_type || 'Semi Privat',
+        session_number || 1,
+        package_total || 8,
+        date || new Date().toISOString().split('T')[0],
+        topic && topic.trim() ? topic.trim() : 'Sesi Bimbingan',
+        targets_achieved || '',
+        score || null,
+        evalJsonStr,
+        progress_notes || '',
+        homework || '',
+        next_target || ''
+      ]
+    );
+
+    res.status(201).json({ success: true, message: 'Jurnal belajar berhasil disimpan.', journal_id: result.insertId });
+  } catch (error) {
+    console.error('Error creating journal:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ==============================================================================
 // 13. RESCHEDULE & PERMINTAAN IZIN
 // ==============================================================================
@@ -1999,9 +2105,13 @@ app.get('/api/reschedule', authenticateToken, async (req, res) => {
         query += ' AND r.student_id = -1';
       }
     } else if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND sch.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND sch.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND sch.tutor_id = -1`;
+      }
     }
 
     if (student_id) {
@@ -2422,9 +2532,13 @@ app.get('/api/tutor-attendance-recap', authenticateToken, async (req, res) => {
     const params = [];
 
     if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND a.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND a.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND a.tutor_id = -1`;
+      }
     } else if (tutor_id) {
       query += ` AND a.tutor_id = ?`;
       params.push(tutor_id);
@@ -2484,9 +2598,13 @@ app.get('/api/tutor-recaps', authenticateToken, async (req, res) => {
     const params = [];
 
     if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND r.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND r.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND r.tutor_id = -1`;
+      }
     } else if (tutor_id) {
       query += ` AND r.tutor_id = ?`;
       params.push(tutor_id);
@@ -2691,9 +2809,13 @@ app.get('/api/ai-reports', authenticateToken, async (req, res) => {
         query += ' AND r.student_id = -1';
       }
     } else if (req.user.role === 'tutor') {
-      const tutorId = req.user.tutor_id || 1;
-      query += ` AND r.tutor_id = ?`;
-      params.push(tutorId);
+      const tutorId = await getEffectiveTutorId(req.user);
+      if (tutorId) {
+        query += ` AND r.tutor_id = ?`;
+        params.push(tutorId);
+      } else {
+        query += ` AND r.tutor_id = -1`;
+      }
     }
 
     if (student_id) {
@@ -2745,7 +2867,7 @@ app.post('/api/ai-reports/generate', authenticateToken, requireRole('admin', 'tu
       [student_id, program_name]
     );
 
-    const actualTutorId = studentProg?.tutor_id || req.user.tutor_id || 1;
+    const actualTutorId = studentProg?.tutor_id || (await getEffectiveTutorId(req.user));
     const reportPeriod = period || 'Agustus 2026';
     const milestone = milestone_session || (studentProg?.package_sessions === 4 ? 4 : 4);
     const reportTitle = `Laporan Perkembangan ${program_name} – Pertemuan ${milestone} (${reportPeriod})`;
